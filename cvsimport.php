@@ -246,11 +246,15 @@ class NodeList
   
   function preparenodes($filename, $isbinary, &$fnodes, &$head) // set up nodes for a particular file
   {
+    $sfn = substr($filename,1);
     $keys = array_keys($fnodes);
     foreach($keys as $i)
     {
       $node = &$fnodes[$i];
       $depth = count($node->revision);
+      
+      $node->useme4tag = $node->taglist[$sfn];
+      //print("for '$sfn' revision $i tag = '$node->useme4tag'\n");
 
       // establish $pnode (reference to posterior node) and $node->nrevision (new revision number)
       if($node->posterior === false)
@@ -400,15 +404,15 @@ class NodeList
     fwrite($fp, "access\t;\n");
     fwrite($fp, "symbols\t");
 
-    foreach($keys as $i)
-    {
-      if ($fnodes[$i]->exists) // it should not be strictly neccessary to skip tags for dead files, but this seems to conform with observed cvs behavior
-      foreach($fnodes[$i]->tag as $tag)
-      if (strlen($tag) > 0)  
-        fwrite($fp, "\n\t$tag:" . implode(".", $fnodes[$i]->nrevision));
-      if (strlen($fnodes[$i]->btag) > 0)
-        fwrite($fp, "\n\t" . $fnodes[$i]->btag . ":" . implode(".", array_slice($fnodes[$i]->nrevision,0,-1)));
-    }    
+    //foreach($keys as $i)
+    //{
+    //  if ($fnodes[$i]->exists) // it should not be strictly neccessary to skip tags for dead files, but this seems to conform with observed cvs behavior
+    //  foreach($fnodes[$i]->tag as $tag)
+    //  if (strlen($tag) > 0)  
+    //    fwrite($fp, "\n\t$tag:" . implode(".", $fnodes[$i]->nrevision));
+    //  if (strlen($fnodes[$i]->btag) > 0)
+    //    fwrite($fp, "\n\t" . $fnodes[$i]->btag . ":" . implode(".", array_slice($fnodes[$i]->nrevision,0,-1)));
+    //}    
     fwrite($fp,";\n");  
 
     fwrite($fp, "locks\t;\nstrict\t;\ncomment\t@# @;\n");
@@ -442,9 +446,14 @@ class NodeList
     
     $NODE_BODY_COMPARE_LIST = $fnodes;
     usort($keys, "node_body_compare");
-
+    $lastdate = 0;
     foreach($keys as $i)
     {
+      if ($fnodes[$i]->useme4tag && $fnodes[$i]->date > $lastdate)
+      {
+        $lastdate = $fnodes[$i]->date;
+      }  
+      
       fwrite($fp, implode(".", $fnodes[$i]->nrevision) . "\n");
       fwrite($fp, "log\n@");
       if ($fnodes[$i]->placeholder)
@@ -456,7 +465,9 @@ class NodeList
         fwrite($fp, "file " . str_replace("@", "@@", $thefile) . " was initially added on branch " . $thebranch->btag);
       }
       else
-        fwrite($fp, str_replace("@", "@@", $fnodes[$i]->log));
+        //fwrite($fp, str_replace("@", "@@", $fnodes[$i]->log));
+        fwrite($fp, str_replace("@", "@@", $fnodes[$i]->useme4tag));
+        
       fwrite($fp, "@\ntext\n@");
 
       if ($fnodes[$i]->diff !== false)
@@ -482,7 +493,9 @@ class NodeList
       if ($fnodes[$i]->diff !== false) pclose($pp); else fclose($pp);
       fwrite($fp, "$leftovers@\n\n");
     }
-    fclose($fp);
+    fclose($fp); 
+    print("\n                              touch  -d \"" . date("Y-m-d H:i:s",$lastdate) . "\" " . substr($filename,1) . ",v\n");        
+    touch("$OUTDIR$filename,v",$lastdate);
   }
 }
 
@@ -597,24 +610,63 @@ function array_eq($a, $b, $depth)
 ///////////////////////////////////////////////////////////////////////////////
 /*                        BEGIN SCRIPT CUSTOMIZATIONS                        */
 
-//$DEFAULT_AUTHOR = "travis";
-  
-//$DEFAULT_AUTHOR = "professor";
-
 $DEFAULT_AUTHOR = "russ";
-  
+
 $VERSIONS = array
 (
-    new RCSNode("M:/robot/russ", "1.1", "tag", "",  "weekend work")
-//  new RCSNode("M:/robot/site", "1.1", "tag", "", "from www site"),
-//  new RCSNode("M:/robot/2001-11-21 19!38!15 vanessa", "1.2", "tag", "", "from vanessa email")
-//  new RCSNode("M:/robot/2001-11-18 12!36!49 -0500 travis", "1.1", "tag", "", "Here's what I came up with for building the visibility graph. The function\ntakes two arrays of adjacency-list pointers (one empty, one populated with\nthe edges of the obstacles), arrays of x-values and y-values, and the\nnumber of total vertices (including the start and goal vertices, which are\nassumed to be the last two in the array).\n\nThe first test case (commented out) is:\n      *         * G\n    / |\n   /  |    *----*\n  /   |    |   /\n *----*    |  /\n           | /\n * S       *\n\nThe function doesn't correctly handle overlapping objects. The uncommented\ntest case is:\n\n           *        * G\n         / |\n      / *--+-------*\n   /    |  |     /\n *------+--*  /\n        |  /\n * S    *\n\nmore or less, and the output is the same. I think the bug is in the\nintersect function, but I'm not sure. I will try and spend some time in\ngdb...\n\nAnyway, the functions this affects are\n1. the one that reads the files: This needs to fill the obstacles array\nwith adjacency lists representing the obstacle edges, assign a value to\nnum_vertices, and fill the x and y arrays.\n2. Dijkstra's algorithm; Not that there were many ways to do this, anyway.\nIf we search from the goal state, instead of the start, storing in an\nint_list array d both the distance so far (d->v) and the node from which\nthat distance was obtained (d->next), d[START] will be a list of nodes\nforming the shortest path with no additional processing.\n\nJust some ideas, feedback is welcome.\n"),
-//  new RCSNode("M:/robot/2001-11-24 22!02!44 -0500 travis", "1.2", "tag", "", "Here's the simple stop-and-go code. I don't know how much \"tighter\" the\nreal path will be than the one I eyeballed, so we might need to add some\nbuffer space in there. Not sure where that would go. Also want to tweak\nthe velocities a little and see where we can go a little faster.\n"),
-//  new RCSNode("M:/robot/2001-11-25 11!09!11 -0500 travis", "1.3", "tag", "", "Okay, here's a faster one. It's what Russell and I talked about doing. It\nrecalculates the heading and translation at every step and adjusts as\nnecessary. It sets them concurrently, and overshoots corners to leave\nturning room. It's a little tighter than we'd really want, but that\ndepends on how tightly we grow obstacles and can be changed easily...oh, I\nalso bumped up the maximum velocity to the published spec for the Pioneer,\nso even the old one is quite a bit faster.\n"),
-//  new RCSNode("M:/robot/2001-11-25 18!20!07 -0500 travis", "1.4", "tag", "", "Okay, this one has a Dijkstra's algorithm and test code. It takes an array\nof edge lists with distances and the start node, and returns a d array. A\nutility function then takes the d array and the goal node and returns a\nlinked list of vertices.\n")
+  new RCSNode("S:/lostcities/backup/0010"    , "1.01"    , "T0010" , "", ""),
+  new RCSNode("S:/lostcities/backup/0018"    , "1.02"    , "T0018" , "", ""),
+  new RCSNode("S:/lostcities/backup/0019"    , "1.03"    , "T0019" , "", ""),
+  new RCSNode("S:/lostcities/backup/0020"    , "1.04"    , "T0020" , "", ""),
+  new RCSNode("S:/lostcities/backup/0030"    , "1.05"    , "T0030" , "", ""),
+  new RCSNode("S:/lostcities/backup/0040"    , "1.06"    , "T0040" , "", ""),
+  new RCSNode("S:/lostcities/backup/0050"    , "1.07"    , "T0050" , "", ""),
+  new RCSNode("S:/lostcities/backup/0060"    , "1.08"    , "T0060" , "", ""),
+  new RCSNode("S:/lostcities/backup/0070"    , "1.09"    , "T0070" , "", ""),
+  new RCSNode("S:/lostcities/backup/0080"    , "1.10"    , "T0080" , "", ""),
+  new RCSNode("S:/lostcities/backup/0090"    , "1.11"    , "T0090" , "", ""),
+  new RCSNode("S:/lostcities/backup/0100"    , "1.12"    , "T0100" , "", ""),
+  new RCSNode("S:/lostcities/backup/0110"    , "1.13"    , "T0110" , "", ""),
 ); 
 
-$OUTDIR = "M:/robot/out";
+// 459 log write
+
+$foldernames = array();
+
+$fp = fopen ("S:/lostcities/backup/out.csv","r");
+$nodeidx = array();
+for($i =0; $data = fgetcsv ($fp, 8192, ","); ++$i)
+{
+  if ($i == 0)
+  {
+    foreach($data as $k => $v)
+    {
+      print("head = $k => $v\n");
+      if ($k != 0)
+      {
+        foreach(array_keys($VERSIONS) as $vkey)
+        {
+          //print ("tag = " . $VERSIONS[$vkey]->tag[0] . "\n");
+          if ($VERSIONS[$vkey]->tag[0] == "T$v")
+          {
+            $nodeidx[$k] = $vkey;
+            $VERSIONS[$vkey]->taglist = array();
+            break;
+          }
+        }
+      }
+    }
+    continue;
+  }
+  $filename = $data[0];
+  foreach($data as $k => $v)
+  {
+    if ($k == 0) continue;
+    $VERSIONS[$nodeidx[$k]]->taglist[$filename] = $v;
+    //print("revision $nodeidx[$k] $filename = '$v'\n");
+  } 
+}
+$OUTDIR = "S:/lostcities/backup/out";
 
 function is_binary($name)
 {
