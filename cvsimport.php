@@ -1,5 +1,8 @@
 <?
 
+ini_set("output_buffering", "0");
+ini_set("implicit_flush", "1");
+
 class RCSNode
 {
   // public variables:
@@ -24,7 +27,7 @@ class RCSNode
   var $diff;
   var $placeholder;
   
-  function RCSNode($directory, $srevision, $tag, $btag, $log)
+  function RCSNode($directory, $srevision, $tag, $btag, $log, $author = false)
   {
     GLOBAL $DEFAULT_AUTHOR, $BLANKFILE;
     
@@ -34,7 +37,7 @@ class RCSNode
     $this->btag = $btag;
     $this->log = $log;
     $this->date = false;
-    $this->author = $DEFAULT_AUTHOR;
+    $this->author = $author === false ? $DEFAULT_AUTHOR : $author;
     $this->state = "";
     $this->branches = array();
     $this->next = false;
@@ -380,7 +383,7 @@ class NodeList
   
   function writeRCS($filename, $isbinary, &$fnodes, $head)
   {
-    global $OUTDIR, $DEFAULT_AUTHOR, $NODE_BODY_COMPARE_LIST;
+    global $OUTDIR, $NODE_BODY_COMPARE_LIST;
     
     if (!$fnodes[$head]->exists)
     {
@@ -412,13 +415,13 @@ class NodeList
     fwrite($fp,";\n");  
 
     fwrite($fp, "locks\t;\nstrict\t;\ncomment\t@# @;\n");
-    if ($isbinary) fwrite($fp, "expand\t@b@;\n");
+    if ($isbinary) fwrite($fp, "expand\t@b@;\n"); else fwrite($fp, "expand\t@o@;\n");
     fwrite($fp, "\n\n");
 
     foreach($keys as $i)
     {
       fwrite($fp, implode(".", $fnodes[$i]->nrevision) . "\n");
-      fwrite($fp, "date\t" . gmdate("Y.m.d.H.i.s",$fnodes[$i]->date) . ";\tauthor " . $DEFAULT_AUTHOR . ";\tstate " . $fnodes[$i]->state . ";\n");
+      fwrite($fp, "date\t" . gmdate("Y.m.d.H.i.s",$fnodes[$i]->date) . ";\tauthor " . $fnodes[$i]->author . ";\tstate " . $fnodes[$i]->state . ";\n");
       fwrite($fp, "branches\t");
       foreach($fnodes[$i]->branches as $branch)
         fwrite($fp, "\n\t" . implode(".", $fnodes[$branch]->nrevision));
@@ -436,8 +439,10 @@ class NodeList
     }
     else
     {
-      $search = array("@","\r\n");
-      $replace = array("@@","\n");
+      $search = "@";
+      $replace = "@@";
+      //$search = array("@","\r\n");
+      //$replace = array("@@","\n");
     }
     
     $NODE_BODY_COMPARE_LIST = $fnodes;
@@ -597,38 +602,33 @@ function array_eq($a, $b, $depth)
 ///////////////////////////////////////////////////////////////////////////////
 /*                        BEGIN SCRIPT CUSTOMIZATIONS                        */
 
-$DEFAULT_AUTHOR = "russ";
+function is_binary($filename)
+{
+  global $is_binary_endings;
+  for($i = -4; $i >= -4; --$i)
+    if (isset($is_binary_endings[substr($filename, $i)])) return true;
+  return false;
+}
 
-include("L:/temp/database/logs");
+$is_binary_endings = array
+(
+  ".gif" => 1, ".jpg"  => 1
+);
+
+$DEFAULT_AUTHOR = "algore";
 
 $VERSIONS = array
 (
-  new RCSNode("L:/temp/database/1.01"    , "1.01"    , $tag_1_1     , "", $log_1_1 ),
-  new RCSNode("L:/temp/database/1.02"    , "1.02"    , $tag_1_2     , "", $log_1_2 ),
-  new RCSNode("L:/temp/database/1.03"    , "1.03"    , $tag_1_3     , "", $log_1_3 ),
-  new RCSNode("L:/temp/database/1.04"    , "1.04"    , $tag_1_4     , "", $log_1_4 ),
-  new RCSNode("L:/temp/database/1.04.2.1", "1.04.2.1", $tag_1_4_2_1 , $bta_1_4_2_1, $log_1_4_2_1),
-  new RCSNode("L:/temp/database/1.05"    , "1.05"    , $tag_1_5     , "", $log_1_5 ),
-  new RCSNode("L:/temp/database/1.06"    , "1.06"    , $tag_1_6     , "", $log_1_6 ),
-  new RCSNode("L:/temp/database/1.07"    , "1.07"    , $tag_1_7     , "", $log_1_7 ),
-  new RCSNode("L:/temp/database/1.08"    , "1.08"    , $tag_1_8     , "", $log_1_8 ),
-  new RCSNode("L:/temp/database/1.09"    , "1.09"    , $tag_1_9     , "", $log_1_9 ),
-  new RCSNode("L:/temp/database/1.10"    , "1.10"    , $tag_1_10    , "", $log_1_10),
-  new RCSNode("L:/temp/database/1.11"    , "1.11"    , $tag_1_11    , "", $log_1_11),
-  new RCSNode("L:/temp/database/1.12"    , "1.12"    , $tag_1_12    , "", $log_1_12),
-  new RCSNode("L:/temp/database/1.13"    , "1.13"    , $tag_1_13    , "", $log_1_13),
-  new RCSNode("L:/temp/database/1.14"    , "1.14"    , $tag_1_14    , "", $log_1_14),
-  new RCSNode("L:/temp/database/1.14.2.1", "1.14.2.1", $tag_1_14_2_1, $bta_1_4_2_1, $log_1_14_2_1),
-  new RCSNode("L:/temp/database/1.15"    , "1.15"    , $tag_1_15    , "", $log_1_15),
-  new RCSNode("L:/temp/database/1.16"    , "1.16"    , $tag_1_16    , "", $log_1_16)
+  new RCSNode("M:/cygwin/home/russ/linux-1.1-config" , "1.1"    , "CONFIG",   "",    "Imported configuration file.", "nieh" ),
+  new RCSNode("M:/cygwin/home/russ/linux-1.2-pure"   , "1.2"    , "KERNEL",   "",    "Imported kernel" ),
+  new RCSNode("M:/cygwin/home/russ/linux-1.3-dbg"    , "1.3"    , "DKERNEL",  "",    "Imported patched kernel with debugger" )
+//  new RCSNode("M:/cygwin/home/russ/linux-1.3.1.1-hw2", "1.3.1.1", "HW2-fork", "HW2",  "", "osteam" )
+//  new RCSNode("M:/cygwin/home/russ/linux-1.3.1.2-hw2a", "1.3.1.2","HW2a",     "",  "Implemented our syscall. All functionality is present, but it has a serious bug which causes it to crash when it is passed a non-null pinfo pointer.", "osteam" )
 ); 
 
-$OUTDIR = "L:/temp/database/out";
+$OUTDIR = "M:/cygwin/home/russ/out";
 
-function is_binary($name)
-{
-  return false;
-}
+
 
 /*                         END SCRIPT CUSTOMIZATIONS                         */
 ///////////////////////////////////////////////////////////////////////////////
