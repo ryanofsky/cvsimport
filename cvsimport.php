@@ -3,10 +3,101 @@
 ini_set("output_buffering", "0");
 ini_set("implicit_flush", "1");
 
+// binary file that should be marked as such in cvs (given kb flag)
+define("MODE_BINARY", 0);
+
+// text file. any CRLF's and CR's will be replaced by LF's. This mode should be
+// be used for any Unix, Mac, or PC text file. It should not be used for
+// binary files because it will corrupt them.
+define("MODE_TEXT", 1);
+
+// text file that should be copied into cvs literally (without replacing CRLF's
+// and CR's with LF's
+// Use this mode when you are unsure if a file is a unix text file or if it contains
+// binary data. In this mode, binary files will not be corrupted on import, and
+// you can always mark them with -kb later to prevent them from being corrupted
+// on checkout with non-unix cvs clients. This mode should not be used for files
+// that contain MS-DOS or mac line endings, otherwise those line endings will
+// be copied literally into cvs. It only works for UNIX text files because the CVS
+// server happens to use the UNIX format internally.
+define("MODE_SAFETEXT", 2);
+
+// on unix, this is equivalent to MODE_SAFETEXT, on PC and MAC this is almost
+// exactly the same as MODE_TEXT. This mode can be used on text files that
+// are in the format corresponding to the current operating system. The script
+// will open these files in "rt" mode and allow the system's C library to perform
+// and translations. This mode is included for completeness only, there shouldn't
+// be any reason to use it unless you are running this on operating system which
+// stores text files in an unknown format.
+define("MODE_NATIVETEXT", 3);
+
+$mode_abbrevs = array(MODE_BINARY => 'b', MODE_TEXT => 't', MODE_SAFETEXT => 's', MODE_NATIVETEXT => 'v');
+
+function translate_file($filename, $mode, &$temporary)
+{
+  if ($mode == MODE_BINARY || $mode == MODE_SAFETEXT)
+  {
+    $temporary = false;
+    return $filename;
+  }
+
+  if ($mode == MODE_TEXT)
+  {
+    $fn = tempnam("","");
+    $temporary = true;
+
+    $fr = fopen($filename, 'rb');
+    $fw = fopen($fn, 'wb');
+
+    $lastCR = false;
+
+    while(!feof($fr))
+    {
+      $str = fread($fr, 8192);
+
+      if ($lastCR && substr($str, 0, 1) == "\r")
+        $str = substr($str, 1);
+
+      $lastCR = substr($str, -1) == "\n";
+
+      $str = str_replace("\r\n", "\n", $str);
+      $str = str_replace("\r", "\n", $str);
+
+      fwrite($fw, $str);
+    }
+
+    fclose($fr);
+    fclose($fw);
+
+    return $fn;
+  }
+  else if ($mode == MODE_NATIVETEXT)
+  {
+    $fn = tempnam("","");
+    $temporary = true;
+
+    $fr = fopen($filename, 'rt');
+    $fw = fopen($fn, 'wb');
+
+    while(!feof($fr))
+    {
+      $str = fread($fr, 8192);
+      fwrite($fw, $str);
+    }
+
+    fclose($fr);
+    fclose($fw);
+
+    return $fn;
+  }
+  else
+    print("Warning: Unknown mode $mode\n");
+}
+
 class RCSNode
 {
   // public variables:
-  
+
   var $directory; // folder containing that srevision
   var $srevision; // cvs style revision number in string form
   var $tag; // tag name to use for this revision
@@ -14,10 +105,10 @@ class RCSNode
   var $log; // log entry to use for changes made in this revision
   var $date; // date to use for deletions in this srevision, false to use the date of the newest file
   var $author; // author string, false to use the default author
-  
+
   // internal variables:
-  
-  var $state; 
+
+  var $state;
   var $branches;
   var $next;
   var $diff;
@@ -26,11 +117,12 @@ class RCSNode
   var $revision; // cvs revision as an array of integers
   var $diff;
   var $placeholder;
-  
+  var $temporary = false;
+
   function RCSNode($directory, $srevision, $tag, $btag, $log, $author = false)
   {
     GLOBAL $DEFAULT_AUTHOR, $BLANKFILE;
-    
+
     $this->directory = $directory;
     $this->srevision = $srevision;
     $this->tag = $tag ? (is_array($tag) ? $tag : array($tag)) : array();
@@ -42,17 +134,16 @@ class RCSNode
     $this->branches = array();
     $this->next = false;
     $this->diff = false;
-    
+
     $this->posterior = false;
     $this->ulterior = false;
-    
+
     $this->revision = array_map("make_integer",explode(".", $srevision));
 
     $this->branchno = 0;
-    $this->exists = false;
     $this->filename = $BLANKFILE;
     $this->placeholder = false;
-    
+
     $depth = count($this->revision);
     if ($depth < 2)
       warning("\"$srevision\" is not a valid revision number. Revision numbers be series of digits separated by dots like 1.2, 1.31, 1.33.5.73, or 44.56 . A revision number has to have at least one dot.");
@@ -60,13 +151,13 @@ class RCSNode
       warning("\"$srevision\" is not a valid revision number. (Revision numbers must have an even number of segments like 1.2 or 1.2.2.3 and NOT like 1.2.3)");
     else if (in_array(0,$this->revision,true))
       warning("\"$srevision\" is not a valid revision number. None of the numbers in a revision numbers can be zeros.");
- 
+
     foreach($this->tag as $tag)
     if (strlen($tag) > 0 && !valid_tag($tag))
-      warning("Revision \"$srevision\" has an invalid tag. A tag must begin with a letter and can be followed by letters, numbers, hypens, and underscores. Two reserved words \"BASE\" and \"HEAD\" cannot be used as tag names.");  
-    
+      warning("Revision \"$srevision\" has an invalid tag. A tag must begin with a letter and can be followed by letters, numbers, hypens, and underscores. Two reserved words \"BASE\" and \"HEAD\" cannot be used as tag names.");
+
     if (strlen($btag) > 0 && !valid_tag($btag))
-      warning("Revision \"$srevision\" has an invalid branch tag. A tag must begin with a letter and can be followed by letters, numbers, hypens, and underscores. Two reserved words \"BASE\" and \"HEAD\" cannot be used as tag names.");  
+      warning("Revision \"$srevision\" has an invalid branch tag. A tag must begin with a letter and can be followed by letters, numbers, hypens, and underscores. Two reserved words \"BASE\" and \"HEAD\" cannot be used as tag names.");
   }
 }
 
@@ -90,37 +181,37 @@ class NodeList
   var $nodes;   // array of nodes
   var $files;   // associative array of all files that ever existed in the project. file paths are indices
   var $folders; // associative array of all folders that ever existed in the project. folder paths are indices
-  
+
   var $defaultbranch; // array index of the head of the RCS default branch
 
   var $prune; // if set to true, new revision numbers will only be assigned to a file when it has been modified
 
   // PUBLIC FUNCTIONS
-  
+
   function NodeList($nodes)
   {
     $this->prune = true;
 
     usort($nodes, "node_compare");
-  
+
     $history = array();
     $this->defaultbranch = false;
-    
+
     for($i = 0; $i < count($nodes); ++$i) // traverse the sorted list and fill in the next, diff, and branches members
     {
       $srevision = $nodes[$i]->srevision;
       $revision = $nodes[$i]->revision;
       $depth = count($revision);
-      
+
       if ($revision == array(1,1,1,1)) $this->defaultbranch = $i;
-      
+
       // $pr is the index of the previous node on the current branch
       // $pa is the index of this branch's parent node
       $pr = isset($history[$depth]) ? $history[$depth] : false;
       $pa = isset($history[$depth - 2]) ? $history[$depth - 2] : false;
-  
+
       $needs_branch_tag = false;
-  
+
       if($depth == 2) // revision is on the main trunk
       {
         if ($pr !== false) // not the very first revision
@@ -129,7 +220,7 @@ class NodeList
           $nodes[$i]->next = $pr;       // point backwards to the previous revision
           $nodes[$i]->posterior = $pr;
           $nodes[$pr]->ulterior = $i;
-        }  
+        }
       }
       else if($pr !== false && array_eq($revision,$nodes[$pr]->revision,$depth-1))
       {
@@ -147,17 +238,17 @@ class NodeList
         $needs_branch_tag = true;
         $nodes[$i]->posterior = $pa;
       }
-      
+
       if (!$needs_branch_tag && strlen($nodes[$i]->btag) > 0)
         warning("You supplied a branch tag for revision \"$srevision\" that cannot be used because this revision is not at the head of a new branch. You need to set it to the empty string (\"\") or false.");
       else if ($needs_branch_tag && strlen($nodes[$i]->btag) == 0)
         warning("Because revision \"$srevision\" is at the head of a new branch, you must to give it a branch tag");
-     
+
       $history[$depth] = $i;
     };
-    
+
     if (!isset($history[2])) warning("The CVS is tree is all branches and no trunk! CVS requires that you have at least one revision on the trunk to serve as the \"HEAD\" revision which is what all the other diffs in the file are ultimately based on. If you are sure you do not want any of your revisions to be on the trunk, you need to create a 1.1 revision and point it to a blank directory. If you are trying to emulate the results of a fresh CVS import command (which puts the files on vendor revision 1.1.1.1 AND on the trunk) just do these things: 1)Create a new 1.1 revision. 2)Point it to the same directory as your 1.1.1.1 revision. 3)Set the log entry to \"Initial revision\". 4)The branch tag on the 1.1.1.1 revision is equivalent to the \"vendor-tag\" argument of the CVS import command, so set that however you like it. 5)Do not create a tag for the 1.1 revision. Instead of a string, put false.");
-    
+
     $this->nodes = $nodes;
   }
 
@@ -183,9 +274,9 @@ class NodeList
       print("  Posterior:  " . ($v->posterior!== false ? $this->nodes[$v->posterior]->srevision : "---" ) . "\n");
       print("  Ulterior:   " . ($v->ulterior !== false ? $this->nodes[$v->ulterior ]->srevision : "---" ) . "\n");
       print("\n");
-    }  
+    }
   }
-  
+
   function ScanFolders($node = false, $folder = "")
   {
     global $OUTDIR;
@@ -195,22 +286,22 @@ class NodeList
       {
         $date = $this->ScanFolders($i);
         if ($this->nodes[$i]->date === false) $this->nodes[$i]->date = $date;
-      }  
+      }
     }
     else
     {
       $root = $this->nodes[$node]->directory;
       $current = "$root$folder";
       $folderobj = opendir($current) or die ("\n\nOh no! opendir(\"$current\") failed!\n\n");
-     
-      $mtime = 0;      
-     
+
+      $mtime = 0;
+
       while (($name = readdir($folderobj)) !== false)
       if ($name !== "." && $name !== "..")
       {
         $relative = "$folder/$name";
         $absolute = "$current/$name";
-      
+
         if (is_dir($absolute))
         {
           if(!isset($this->folders[$relative]))
@@ -219,7 +310,7 @@ class NodeList
             $this->folders[$relative] = true;
           }
           $timestamp = $this->ScanFolders($node, $relative);
-        }  
+        }
         else
         {
           $this->files[$relative] = true;
@@ -230,24 +321,25 @@ class NodeList
       return $mtime;
     }
   }
-  
+
   function save()
   {
+    global $mode_abbrevs;
     reset ($this->files);
     while (list($filename) = each($this->files))
     {
       $fnodes = $this->nodes;
-      $isbinary = is_binary(substr($filename,1));
-      print(($isbinary ? "B" : "A") .  " $filename ... ");
-      $this->preparenodes($filename, $isbinary, $fnodes, $head);
-      $this->writeRCS($filename, $isbinary, $fnodes, $head);
+      $mode = get_mode(substr($filename,1));
+      print($mode_abbrevs[$mode] .  " $filename ... ");
+      $this->preparenodes($filename, $mode, $fnodes, $head);
+      $this->writeRCS($filename, $mode, $fnodes, $head);
       print("Done.\n");
     }
   }
 
   // PRIVATE HELPER FUNCTIONS
-  
-  function preparenodes($filename, $isbinary, &$fnodes, &$head) // set up nodes for a particular file
+
+  function preparenodes($filename, $mode, &$fnodes, &$head) // set up nodes for a particular file
   {
     $keys = array_keys($fnodes);
     foreach($keys as $i)
@@ -272,42 +364,43 @@ class NodeList
         }
         else
           ++$node->nrevision[count($node->nrevision)-1];
-      }  
-      
+      }
+
       // can this node be eliminated? is it redundant?
-      $keep = false; 
-      if (file_exists($node->directory . $filename))
+      $keep = false;
+      $node->realname = $node->directory . $filename;
+      if (file_exists($node->realname))
       {
         $node->exists = true;
-        $node->filename = $node->directory . $filename;
+        $node->filename = translate_file($node->realname, $mode, $node->temporary);
         $node->date = filemtime($node->filename);
         if ($pnode->exists)
         {
-          $b = $isbinary ? "--binary" : "";
           $f1 = $pnode->filename;
           $f2 = $node->filename;
-          if (`diff -q $b "$f1" "$f2"`) $keep = true;
+          if (`diff -q --binary "$f1" "$f2"`) $keep = true;
         }
         else
-          $keep = true;  
+          $keep = true;
       }
       else // file_not_exists
       {
+        $node->exists = false;
         $node->filename = $pnode->filename; // the diff for a deleted file tells what the file looked like before it was deleted
         if ($pnode->exists) $keep = true;
-      }  
-    
+      }
+
       if ($node->posterior === false && !$keep && count($node->branches) > 0)
       {
         $keep = true;
         $node->placeholder = true; // can't delete this node unless all branch nodes are deleted
-      }  
-    
+      }
+
       if ($node->btag && $node->exists)
         $keep = true;
-      
+
       if (!$this->prune) $keep = true;
-                  
+
       if($keep)
       {
         $node->state = $node->exists ? "Exp" : "dead";
@@ -323,7 +416,7 @@ class NodeList
             $this->deletenode($fnodes,$node->posterior);
             $node->posterior = false;
             unset($pnode);
-          }  
+          }
           else
           {
             $f = array_search($i,$pnode->branches);
@@ -334,7 +427,7 @@ class NodeList
             }
             else
               unset($pnode->branches[$f]);
-          }    
+          }
         }
 
         if (isset($pnode) && $node->date < $pnode->date)
@@ -349,23 +442,25 @@ class NodeList
       }
     }
   }
-  
+
   function deletenode(&$fnodes, $i)
   {
     $node = &$fnodes[$i];
-    
+
+    if ($node->temporary) unlink($node->filename);
+
     if ($node->next !== false)
       $fnodes[$node->next]->diff = $node->diff;
-      
+
     if (!$node->btag && $node->diff !== false)
       $fnodes[$node->diff]->next = $node->next;
-    
+
     if ($node->ulterior !== false)
       $fnodes[$node->ulterior]->posterior = $node->posterior;
-      
-    if (!$node->btag && $node->posterior !== false)  
+
+    if (!$node->btag && $node->posterior !== false)
       $nodes[$node->posterior]->ulterior = $node->ulterior;
-    
+
     if ($node->posterior !== false)
     {
       $t = &$fnodes[$node->posterior]->tag;
@@ -373,18 +468,18 @@ class NodeList
       array_splice($t,0,0,$node->tag);
       array_splice($b,count($b),0,$node->branches);
       unset($t,$b);
-    }  
+    }
 
     foreach($node->branches as $b)
       $fnodes[$b]->diff = $fnodes[$b]->posterior = $node->posterior;
 
     unset($fnodes[$i]);
   }
-  
-  function writeRCS($filename, $isbinary, &$fnodes, $head)
+
+  function writeRCS($filename, $mode, &$fnodes, $head)
   {
     global $OUTDIR, $NODE_BODY_COMPARE_LIST;
-    
+
     if (!$fnodes[$head]->exists)
     {
       $p = strrpos($filename,"/");
@@ -392,14 +487,14 @@ class NodeList
       @mkdir("$OUTDIR$folder",0777);
       $filename = "$folder/" . substr($filename,$p+1);
     }
-    
+
     $fp = @fopen("$OUTDIR$filename,v","wb") or die("Failed to open \"$OUTDIR$filename,v\" for writing in " . __FILE__ . " on line " . __LINE__);
     $keys = array_reverse(array_keys($fnodes));
 
     fwrite($fp, "head\t" . implode(".",$fnodes[$head]->nrevision) . ";\n");
     if ($this->defaultbranch !== false && isset($fnodes[$this->defaultbranch]))
       fwrite($ftp, "branch\t" . implode(".",$fnodes[$this->defaultbranch]->nrevision) . ";\n");
-  
+
     fwrite($fp, "access\t;\n");
     fwrite($fp, "symbols\t");
 
@@ -407,15 +502,15 @@ class NodeList
     {
       if ($fnodes[$i]->exists) // it should not be strictly neccessary to skip tags for dead files, but this seems to conform with observed cvs behavior
       foreach($fnodes[$i]->tag as $tag)
-      if (strlen($tag) > 0)  
+      if (strlen($tag) > 0)
         fwrite($fp, "\n\t$tag:" . implode(".", $fnodes[$i]->nrevision));
       if (strlen($fnodes[$i]->btag) > 0)
         fwrite($fp, "\n\t" . $fnodes[$i]->btag . ":" . implode(".", array_slice($fnodes[$i]->nrevision,0,-1)));
-    }    
-    fwrite($fp,";\n");  
+    }
+    fwrite($fp,";\n");
 
     fwrite($fp, "locks\t;\nstrict\t;\ncomment\t@# @;\n");
-    if ($isbinary) fwrite($fp, "expand\t@b@;\n"); else fwrite($fp, "expand\t@o@;\n");
+    if ($mode == MODE_BINARY) fwrite($fp, "expand\t@b@;\n"); else fwrite($fp, "expand\t@o@;\n");
     fwrite($fp, "\n\n");
 
     foreach($keys as $i)
@@ -426,25 +521,12 @@ class NodeList
       foreach($fnodes[$i]->branches as $branch)
         fwrite($fp, "\n\t" . implode(".", $fnodes[$branch]->nrevision));
       fwrite($fp, ";\n");
-      
+
       $next = $fnodes[$i]->next === false ? "" :implode(".", $fnodes[$fnodes[$i]->next]->nrevision);
       fwrite($fp, "next\t$next;\n\n");
     }
     fwrite($fp, "desc\n@@\n\n");
-    
-    if ($isbinary)
-    {
-      $search = "@";
-      $replace = "@@";
-    }
-    else
-    {
-      $search = "@";
-      $replace = "@@";
-      //$search = array("@","\r\n");
-      //$replace = array("@@","\n");
-    }
-    
+
     $NODE_BODY_COMPARE_LIST = $fnodes;
     usort($keys, "node_body_compare");
 
@@ -465,29 +547,27 @@ class NodeList
       fwrite($fp, "@\ntext\n@");
 
       if ($fnodes[$i]->diff !== false)
-        $pp = popen("diff -n -a " . ($isbinary ? "--binary " : "") . "\"" . $fnodes[$fnodes[$i]->diff]->filename . " \" \"" . $fnodes[$i]->filename . "\"","rb");
+        $pp = popen("diff -n -a --binary \"" . $fnodes[$fnodes[$i]->diff]->filename . " \" \"" . $fnodes[$i]->filename . "\"","rb");
       else
-        $pp = fopen($fnodes[$i]->filename,"rb");  
+        $pp = fopen($fnodes[$i]->filename,"rb");
 
-      $leftovers = "";
       while(!feof($pp))
       {
-        $buffer = fread($pp, 4096);
-        if (!$isbinary && substr($buffer,-1) == "\r")
-        {
-          $buffer = substr($buffer,0,-1);
-          $scrap = "\r";
-        }
-        else
-          $scrap = "";
-        fwrite($fp, str_replace($search,$replace,$leftovers . $buffer));    
-        $leftovers = $scrap;
+        $buffer = fread($pp, 8192);
+        fwrite($fp, str_replace('@','@@', $buffer));
       }
 
       if ($fnodes[$i]->diff !== false) pclose($pp); else fclose($pp);
-      fwrite($fp, "$leftovers@\n\n");
+      fwrite($fp, "@\n\n");
     }
     fclose($fp);
+
+
+    foreach($keys as $i)
+    {
+      if ($fnodes[$i]->temporary)
+        unlink($fnodes[$i]->filename);
+    }
   }
 }
 
@@ -526,16 +606,16 @@ function valid_tag($tag)
     else if ($o == 95) // underline
       continue;
     else
-      return false;  
+      return false;
   }
-  return true;      
+  return true;
 }
 
 function node_compare($a, $b)
 {
   $ra = &$a->revision;
   $rb = &$b->revision;
-  
+
   for($i=0;;++$i)
   if(isset($ra[$i]))
   {
@@ -543,7 +623,7 @@ function node_compare($a, $b)
     {
       if ($ra[$i] == $rb[$i]) continue;
       return $ra[$i] < $rb[$i] ? -1 : 1;
-    }  
+    }
     else
       return 1;
   }
@@ -561,19 +641,19 @@ function node_body_compare($a,$b)
   particular revision of the file would be arranged in the order they would
   eventually need to be applied. This way, CVS can go through the RCS file
   sequentially without ever having to jump backwards.
-  
+
   Example: 1.5 1.4 1.4.2.1 1.3 1.3.2.1 1.3.2.2 1.2 1.1
-  
-  The code is a copy and paste of node_compare except that it uses a reverse 
+
+  The code is a copy and paste of node_compare except that it uses a reverse
   ordering on the main trunk and a forward ordering on the branches.
 */
 {
   global $NODE_BODY_COMPARE_LIST;
-  
+
   $ra = $NODE_BODY_COMPARE_LIST[$a]->nrevision;
   $rb = $NODE_BODY_COMPARE_LIST[$b]->nrevision;
   $m = -1;
-  
+
   for($i=0;;++$i)
   {
     if ($i > 1) $m = 1;
@@ -583,7 +663,7 @@ function node_body_compare($a,$b)
       {
         if ($ra[$i] == $rb[$i]) continue;
         return $ra[$i] < $rb[$i] ? -$m : $m;
-      }  
+      }
       else
         return $m;
     }
@@ -602,12 +682,12 @@ function array_eq($a, $b, $depth)
 ///////////////////////////////////////////////////////////////////////////////
 /*                        BEGIN SCRIPT CUSTOMIZATIONS                        */
 
-function is_binary($filename)
+function get_mode($filename)
 {
   global $is_binary_endings;
   for($i = -4; $i >= -4; --$i)
-    if (isset($is_binary_endings[substr($filename, $i)])) return true;
-  return false;
+    if (isset($is_binary_endings[substr($filename, $i)])) return MODE_BINARY;
+  return MODE_SAFETEXT;
 }
 
 $is_binary_endings = array
@@ -619,14 +699,15 @@ $DEFAULT_AUTHOR = "algore";
 
 $VERSIONS = array
 (
-  new RCSNode("M:/cygwin/home/russ/linux-1.1-config" , "1.1"    , "CONFIG",   "",    "Imported configuration file.", "nieh" ),
-  new RCSNode("M:/cygwin/home/russ/linux-1.2-pure"   , "1.2"    , "KERNEL",   "",    "Imported kernel" ),
-  new RCSNode("M:/cygwin/home/russ/linux-1.3-dbg"    , "1.3"    , "DKERNEL",  "",    "Imported patched kernel with debugger" )
-//  new RCSNode("M:/cygwin/home/russ/linux-1.3.1.1-hw2", "1.3.1.1", "HW2-fork", "HW2",  "", "osteam" )
-//  new RCSNode("M:/cygwin/home/russ/linux-1.3.1.2-hw2a", "1.3.1.2","HW2a",     "",  "Implemented our syscall. All functionality is present, but it has a serious bug which causes it to crash when it is passed a non-null pinfo pointer.", "osteam" )
-); 
+  new RCSNode("M:/temp/homeworks/os/1" , "1.1"    , "hw1-1",        "", "original shell.", "russ" ),
+  new RCSNode("M:/temp/homeworks/os/2" , "1.2"    , "hw1-2",        "", "added pinfo", "osteam" ),
+  new RCSNode("M:/temp/homeworks/os/3" , "1.3"    , "hw1-submit1",  "", "added readme's and patch", "osteam" ),
+  new RCSNode("M:/temp/homeworks/os/4" , "1.4"    , "hw1-submit2",  "", "fixed readme", "osteam" ),
+  new RCSNode("M:/temp/homeworks/os/5" , "1.5"    , "hw2-1",        "", "Imported nieh's user threading code", "nieh" ),
+  new RCSNode("M:/temp/homeworks/os/6" , "1.6"    , "hw2-2",        "", "friday, oct 18", "osteam" )
+);
 
-$OUTDIR = "M:/cygwin/home/russ/out";
+$OUTDIR = "L:/server/shares/cvsroot/os";
 
 
 
@@ -636,36 +717,36 @@ $OUTDIR = "M:/cygwin/home/russ/out";
 
 // function abc($ra,$rb)
 // {
-//   for($i=0;;++$i)                           
-//   {                                         
-//     if ($i > 1) $m = 1;                     
-//     if(isset($ra[$i]))                      
-//     {                                       
-//       if (isset($rb[$i]))                   
-//       {                                     
-//         if ($ra[$i] == $rb[$i]) continue;   
+//   for($i=0;;++$i)
+//   {
+//     if ($i > 1) $m = 1;
+//     if(isset($ra[$i]))
+//     {
+//       if (isset($rb[$i]))
+//       {
+//         if ($ra[$i] == $rb[$i]) continue;
 //         return $ra[$i] < $rb[$i] ? -$m : $m;
-//       }                                     
-//       else                                  
-//         return $m;                          
-//     }                                       
-//     else if (isset($rb[$i]))                
-//       return -$m;                           
-//     else                                    
-//       return 0;                             
-//   }                                         
+//       }
+//       else
+//         return $m;
+//     }
+//     else if (isset($rb[$i]))
+//       return -$m;
+//     else
+//       return 0;
+//   }
 // }
-// 
+//
 // function abcd($a)
 // {
 //   print( $a . "\n");
 // }
-//   
+//
 // abcd(abc(  array(1,4)      ,  array(1,4,2,1)   ));
 // abcd(abc(  array(1,4,2,1)  ,  array(1,4    )   ));
 // abcd(abc(  array(1,6)      ,  array(1,6,2,1)   ));
 // abcd(abc(  array(1,6,2,1)  ,  array(1,6    )   ));
-  
+
 $BLANKFILE = tempnam("","");
 
 $nl = new NodeList($VERSIONS);
@@ -676,7 +757,7 @@ else
 {
   $nl->ScanFolders();
   $nl->save();
-} 
+}
 
 //
 //$filename = "/include/VHGraph1_0/class.graph1";
@@ -688,7 +769,7 @@ else
 //
 //print("\nDone.\n");
 //
- 
+
 unlink($BLANKFILE);
-    
+
 ?>
