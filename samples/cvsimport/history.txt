@@ -1,0 +1,151 @@
+1.1
+
+cvsimport.php
+Earliest version, won't run properly due to unescaped backslashes in paths
+and versions array defined twice.
+
+1.2
+
+cvsimport.php
+No changes to code, but cleaned up configuration
+
+1.3
+
+cvsimport.php
+Major reorganization, configuration set to import quickman project
+
+1.3.1.1
+
+cvsimport.php
+Customizations for lost cities
+
+1.4
+
+cvsimport.php
+No changes to code, changed configuration to import russ.hn.org site
+
+1.5
+
+cvsimport.php
+No changes to code, changed configuration to import database project
+
+1.6
+
+cvsimport.php
+No changes to code, changed configuration to import wces database schemas
+
+1.7
+
+cvsimport.php
+Changed code to support many authors and to disable keyword expansion. Changed
+configuration to import linux kernel and debugger patch and detect binary files
+differently
+
+1.8
+
+cvsimport.php
+Changed code to handle dos/unix line endings. Changed configuration to import
+operating system homeworks 1 & 2. Also, many changes in whitespace throughout
+file.
+
+1.9
+
+cvsimport.php easygdi.php
+Started major rewrite to import easycrt (during trip to pittsburgh).
+Instead of building a tree and then pruning it for each file, the
+new version builds trees which are already pruned. It is also able
+to prune in more places like at heads of branches. Also, the
+configuration section is now in a separate file.
+
+1.10
+
+cvsimport.php
+Continued work on rewrite (on train to NYC)
+Renamed lots of variables and classes and tried to remove obvious errors.
+
+1.11
+
+cvsimport.php
+- more renaming of variables and classes
+- all error checking moved into RevisionList constructor
+- File::prepareNodes() is renamed to File::setRevisions() and now has complete
+  implementation. Ancient File::DeleteNode() method is finally gone.
+- File::writeRCS() is now up to date
+- some helper functions at the bottom have been renamed and modified
+- MODE_ constants have been moved to the bottom of the file above
+  TranslateFile()
+
+easygdi.php
+- configuration interface has changed, this file is out of date
+
+1.12
+
+cvsimport.php
+- everything except startup code was moved into cvsimport.inc
+
+cvsimport.inc
+- based on old cvsimport.php, contains pretty much everything that was in
+  that file except startup code
+- Fixes to code that prints error messages
+- Fixes to RevisionList::scan() function to handle case sensitivity.
+- Fixes to File::setRevisions() and File::writeRCS and FileRevision class
+  after some testing
+- added FileEntry() function for picking log entries out of arrays indexed
+  by revision and filename patterns.
+- whitespace changes
+
+testcreate.php
+- php script that makes it pretty easy to test logic in cvsimport.inc with
+  strange corner cases
+
+1.13
+
+cvsimport.inc
+- Fixed typo in RevisionList::scan()
+- fixed handling of zero, ghost revisions in setRevisions(), realParent() and
+  FileRevision()
+- fixed a bug in writeRCS() in creating Attic dirs in the base folder
+- added function FileRevisionString() to fix display problems when trying to
+  print the revision number of  placeholder FileRevision objects
+- got rid of debugging code in RevisionList::save() and commented out debugging
+  print statments in other parts of the program
+- split FileEntry() into two functions: FileEntry() and FileRevisionEntry()
+- added array_appen function for appending a the contents of one scalar array
+  to another scalar array.
+
+cvsimport.php
+- added call to Cleanup() function to allow custom behavior after the
+  import completes.
+
+1.14
+
+cvsimport.inc
+- changed to mimic behavior of cvs. Dead revisions now hold same the same file
+  contents as the previous revision. Before, dead revisions would be given
+  whatever contents allow them to have an empty diff. This change only affects
+  dead revisions on the trunk, there's no difference between the two behaviors
+  on branches.
+
+1.15
+
+cvsimport.inc
+- bugfixes
+- added automatic testing code
+
+cvsimport.php
+- added testing command line option
+
+cvsimport-test.php
+- little regression testing suite
+- based ont testcreate.php
+
+test.zip
+- expected results for regression testing
+- stored in a zip file because you can't store a cvs repository in another
+  cvs repository. (attic dirs and whatnot)
+
+testcreate.php
+- became cvsimport-test.php
+
+/^samples\\\/.*$/i
+sample configuration files used in imports
