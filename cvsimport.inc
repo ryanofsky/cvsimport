@@ -199,7 +199,7 @@ class RevisionList
     else
     {
       $root = $this->revisions[$revision]->directory;
-      $current = "$root$folder";
+      $current = "$root/$folder";
       $folderobj = opendir($current) or die ("\n\nopendir(\"$current\") "
         . "failed at " . __FILE__ . ":" . __LINE__ . "\n\n");
 
@@ -210,12 +210,11 @@ class RevisionList
       {
         $relative = strlen($folder) ? "$folder/$name" : $name;
         $absolute = "$current/$name";
-        debugout("file = $absolute");
 
         if (is_dir($absolute))
         {
           $fr =& $this->tempFolders[normcase($relative)];
-          if($fr)
+          if(empty($fr))
           {
             mkdir("{$this->outFolder}/$relative") or die("Failed to create "
               . "\"{$this->outFolder}/$relative\".\nMake sure "
@@ -223,7 +222,7 @@ class RevisionList
               . "before you run this script.");
             $fr = true;
           }
-          $timestamp = $this->ScanFolders($revision, $relative);
+          $timestamp = $this->scan($revision, $relative);
         }
         else
         {
@@ -246,6 +245,7 @@ class RevisionList
     global $MODE_ABBREVIATIONS;
     foreach($this->files as $path)
     {
+      //!$path = "html/demo.html";
       $file =& new File($path);
       SetFileInfo($file);
 
@@ -326,11 +326,11 @@ class File
       $revision =& $revisions[$key];
       $depth = count($revision->number);
 
-      debugout("revision $key");
+      //debugout("revision $key");
       foreach(array_keys($history) as $h)
       {
         $hr =& $history[$h];
-        debugout("  $h => " . ($hr->revision ? RevisionString($hr->revision->number) : 'Placeholder'));
+        //@debugout("  $h => " . FileRevisionString($hr));
       }
 
       // find previous revision, or parent revision if previous is null
@@ -345,16 +345,16 @@ class File
       for ($i = $depth - 2; $i >= 2; $i -= 2)
       {
         if (isset($history[$i]) && !$history[$i]->isGhost 
-          && !$history[$i]->isZero && $history[$i]->revision)
+          && !$history[$i]->isZero)
         {
-          assert($history[$i]->revision->number
-            == array_slice($revision->number, 0, $i));
           $parent =& $history[$i];
+          assert(!isset($parent->revision) || RevisionIsSameBranch(
+            $parent->revision->number, array_slice($revision->number, 0, $i)));
           break;
         }
       }
 
-      @debugout("  previous = " . RevisionString($previous->revision->number) . " parent = " . RevisionString($parent->revision->number));
+      //@debugout("  previous = " . FileRevisionString($previous) . " parent = " . FileRevisionString($parent));
 
       $newBranch = $depth != 2 && !isset($previous);
 
@@ -375,7 +375,7 @@ class File
           if ($previous->isGhost)
           {
             $p = array();
-            $this->realParent($parent, $history, $depth, $p);
+            $this->realParent($parent, $history, $depth, $fileRev, $previous->btag, $p);
             $parent =& $p[0];
             $previous->attach($this->revisions, $parent, $null);
           }
@@ -389,53 +389,30 @@ class File
       }
       else // !isset($previous)
       {
-        if ($fileRev->changed)
+        if ($fileRev->exists || $fileRev->tagDeletedBranch)
         {
-          if (!isset($parent) && $fileRev->exists && $depth > 2)
-          {
-            assert($history[2]->isGhost);
-            $parent =& $history[2];
-            $parent->author = $fileRev->author;
-            $parent->date = $fileRev->date;
-            list($folder, $file) = PathSplit($this->path);
-            $parent->log = "file $file was initially added on branch "
-              . "{$fileRev->btag}.\n";
-            $parent->attach($this->revisions, $null, $null);
-            $history[2] =& $parent;
-          }
-          
-          assert(isset($parent) || $depth == 2);
-          
-          if ($fileRev->exists || $fileRev->tagDeletedBranch)
-          {
-            $p = array();
-            $this->realParent($parent, $history, $depth, $p);
-            $parent =& $p[0];
-            $fileRev->attach($this->revisions, $parent, $previous);
-          }
-          // otherwise fileRev becomes a "ghost" revision...
+          $p = array();
+          $this->realParent($parent, $history, $depth, $fileRev, $fileRev->btag, $p);
+          $parent =& $p[0];
+          $fileRev->attach($this->revisions, $parent, $previous);
         }
-        else
+        
+        // otherwise fileRev becomes a "ghost" revision...        
+        if (!$fileRev->changed)
         {
-          if ($fileRev->exists || $fileRev->tagDeletedBranch)
-          { // potential "zero" revision
-            if ($fileRev->canPrune && $fileRev->canPruneBranch)
-              $fileRev->isZero = true;
-            $p = array();
-            $this->realParent($parent, $history, $depth, $p);
-            $parent =& $p[0];
-            $fileRev->attach($this->revisions, $parent, $previous);
-          }
-          else if ($depth == 2) // don't add file that hasn't been created yet
+          if ($fileRev->canPrune && $fileRev->canPruneBranch)
+            $fileRev->isZero = true;
+
+          // don't add file that hasn't been created yet
+          if ($fileRev->isGhost && $depth == 2 )
             unset($fileRev);
-            
         }
       }
 
       if (isset($fileRev))
       {
         $history[$depth] =& $fileRev;
-        if ($depth == 2) $this->head =& $fileRev;
+        if ($depth == 2 && !$fileRev->isGhost) $this->head =& $fileRev;
         
         // if latest revision is on a vendor branch, set default branch
         if ($depth == 4 && ($revision->number[2] % 2 == 1) 
@@ -450,20 +427,35 @@ class File
       unset($r, $previous, $parent, $compare);
     }
 
-    $this->display();
+    //$this->display();
   }
 
   // this function is called to correct the $parent parameter when
-  // attaching a revision at the head of a new branch. It only has
-  // an effect when collapsed branch numbers are not allowed
-  // and $parent is a zero or ghost node
+  // attaching a revision at the head of a new branch. If there is no
+  // $parent and the depth is greater than two than a placeholder
+  // parent will be created. Otherwise, it only has an effect when
+  // collapsed branch numbers are not allowed and $parent is a zero
+  // or ghost node
   //
   // due to a strange bug in php 4.3 where the return value of this
   // function mysteriously gets transformed from a null value to an
   // empty array, a reference to the real parent is placed at $p[0]
   // so the return value doesn't have to be trusted
-  function & realParent(&$parent, &$history, $depth, &$p)
+  function & realParent(&$parent, &$history, $depth, &$fileRev, $btag, &$p)
   {
+    if (!isset($parent) && $depth > 2)
+    {
+      assert($fileRev->exists);
+      assert(!isset($history[2]));
+      $parent =& new FileRevision($this, $null, $null, false);
+      $parent->author = $fileRev->author;
+      $parent->date = $fileRev->date;
+      list($folder, $file) = PathSplit($this->path);
+      $parent->log = "file $file was initially added on branch $btag.\n";
+      $parent->attach($this->revisions, $null, $null);
+      $history[2] =& $parent;
+    }
+
     if ($this->collapseRevisions && $this->collapseBranches)
     {
       $p[0] =& $parent;
@@ -475,11 +467,11 @@ class File
     // revisions
     
     $collapsed = false; // only used for the assertion below
-    debugout("finding real parent...");
+    //debugout("finding real parent...");
     for ($hkey = 2; $hkey < $depth; $hkey += 2)
     {
       $hval =& $history[$hkey];
-      @debugout("hval = " . RevisionString($hval->revision->number));
+      //@debugout("hval = " . FileRevisionString($hval));
       if ($hval->isGhost)
       {
         $hval->attach($this->revisions, $p, $null);
@@ -505,9 +497,8 @@ class File
     foreach(array_keys($this->revisions) as $i)
     {
       $nr =& $this->revisions[$i];
-      $or =& $nr->revision;
       print(RevisionString($nr->number) . " => ");
-      print($or ? RevisionString($or->number) : "None");
+      print(FileRevisionString($nr));
       print("\n");
 
       print("  properties:");
@@ -536,7 +527,10 @@ class File
     if (!$this->head->exists)
     {
       list($folder, $file) = PathSplit($this->path);
-      $folder = "$outdir/$folder/Attic";
+      if (strlen($folder))
+        $folder = "$outdir/$folder/Attic";
+      else
+        $folder = "$outdir/Attic";
       @mkdir($folder);
       $rcsfile = "$folder/$file,v";
     }
@@ -606,7 +600,7 @@ class File
       foreach(array_keys($revision->branches) as $j)
       {
         $branch =& $revision->branches[$j];
-        assert(!$branch->isZero);
+        if ($branch->isZero) continue;
         fwrite($fp, "\n\t" . RevisionString($branch->number));
       }
       fwrite($fp, ";\n");
@@ -629,7 +623,8 @@ class File
       {
         if (!isset($revision->log))
           print("Warning: No log message set on revision "
-            . RevisionString($revision->revision->number) . "\n");
+            . RevisionString($revision->number) . " (" 
+            . FileRevisionString($revision) . ")\n");
         fwrite($fp, "*** empty log message ***\n");
       }
 
@@ -747,50 +742,62 @@ class FileRevision
   function FileRevision(&$file, &$revision, &$compare, $key)
   {
     $this->file =& $file;
-    $this->revision =& $revision;
-    $path = "{$revision->directory}/{$file->path}";
+    $this->isGhost = true;
 
-    // find $exists, $date, $contents, $isTemporary
-    if (file_exists($path))
+    if (isset($revision))
     {
-      $this->exists = true;
-      $this->date = filemtime($path);
-      $this->contents = TranslateFile($path, $file->mode,
-        $this->isTemporary);
-    }
-    else
-    {
-      $this->exists = false;
-      $this->date = $revision->date;
-      $this->contents = false;
-      $this->isTemporary = false;
-    }
-
-    // find $changed
-    if ($this->exists)
-    {
-      if (!empty($compare->exists))
+      $this->revision =& $revision;
+      $path = "{$revision->directory}/{$file->path}";
+  
+      // find $exists, $date, $contents, $isTemporary
+      if (file_exists($path))
       {
-        $f1 = shellescape($compare->contents);
-        $f2 = shellescape($this->contents);
-        $this->changed = (bool)`diff -q --binary $f1 $f2`;
+        $this->exists = true;
+        $this->date = filemtime($path);
+        $this->contents = TranslateFile($path, $file->mode,
+          $this->isTemporary);
+
+        if (!empty($compare->exists))
+        {
+          $f1 = shellescape($compare->contents);
+          $f2 = shellescape($this->contents);
+          $this->changed = (bool)`diff -q --binary $f1 $f2`;
+        }
+        else
+          $this->changed = true;
       }
       else
-        $this->changed = true;
+      {
+        $this->exists = false;
+        $this->date = $revision->date;
+        $this->contents = false;
+        $this->isTemporary = false;
+        $this->changed = !empty($compare->exists);
+      }
+  
+      $this->tags = $revision->tags;
+      $this->btag = $revision->btag;
+      SetFileRevisionInfo($this, $key);
     }
     else
-      $this->changed = !empty($compare->exists);
-
-    $this->tags = $revision->tags;
-    $this->btag = $revision->btag;
-    SetFileRevisionInfo($this, $key);
-
-    $this->isGhost = true;
+    {
+      assert(empty($compare) && empty($key));
+      $this->revision = null;
+      $this->exists = false;
+      $this->contents = false;
+      $this->isTemporary = false; 
+      $this->changed = false;
+      $this->tags = array();
+      $this->btag = false;
+    }
   }
 
   // add to array of FileRevisions
   function attach(&$revisions, &$parent, &$previous)
   {
+    assert(!isset($parent) || !$parent->isGhost);
+    assert(!isset($previous) || !$previous->isGhost);
+    
     if (!$this->file->collapseRevisions)
       $this->number = $this->revision->number;
     
@@ -874,14 +881,14 @@ class FileRevision
     $this->nextVendorBranch = 1;
     if (count($this->number) == 2)
       $this->file->head =& $this;
-    debugout("attaching " . RevisionString($this->number));
+    //debugout("attaching " . FileRevisionString($this));
   }
 
   // absorb information from unchanged revision
   function absorb(&$rev)
   {
     assert($rev->btag === false);
-    @debugout(RevisionString($this->number) . " absorbing " . RevisionString($rev->number));
+    //@debugout(FileRevisionString($this) . " absorbing " . FileRevisionString($rev));
     array_splice($this->tags, count($this->tags), 0, $rev->tags);
   }
   
@@ -983,6 +990,16 @@ function RevisionString($r, $depth = false)
   return implode('.', $p);
 }
 
+function FileRevisionString(&$r, $depth = false)
+{
+  if (isset($r))
+  {
+    if (!isset($r->revision)) return "PlaceHolder";
+    return RevisionString($r->revision->number);
+  }
+  return "null";
+}
+
 function PathSplit($path)
 {
   $p = strrpos($path, "/");
@@ -1001,24 +1018,41 @@ function FileExtension($filename)
     return substr($filename, $p+1);
 }
 
-function FileEntry(&$entries, $key, $filename)
+
+function FileEntry(&$entries, $filename)
 {
-  if (!is_array($entries)) return $entries;
+  $key = normcase($filename);
   
-  $t =& $entries[$key]; 
-  if (!is_array($t)) return $t;
-  
-  $u =& $t[normcase($filename)];
-  if (isset($u)) return $u;
-  
-  foreach($t as $re => $val)
+  if (isset($entries[$key])) return $key;
+ 
+  foreach(array_keys($entries) as $re)
   {
     if (!is_string($re) || $re[0] != '/') continue;
     if (preg_match($re, $filename))
-      return $val;
+      return $re;
   }
-  
   return null;
+}
+
+function FileRevisionEntry($entries, $revisionKey, $filename)
+{
+  if (!is_array($entries)) return $entries;
+  $t =& $entries[$revisionKey]; 
+  if (!is_array($t)) return $t;  
+
+  $key = FileEntry($t, $filename);
+  return isset($key) ? $t[$key] : null;
+}
+
+function LoadEntries($filename)
+{
+  $fp = fopen($filename, "rt");
+  $rev = null;
+  for (;;)
+  {
+    $line = readline($fp);
+  }
+  fclose($fp);
 }
 
 define("MODE_TRANSLATE_MASK", 3);
@@ -1145,6 +1179,14 @@ function shellescape($arg)
   // on unix
   // return escapeshellarg($arg);
   return '"' . str_replace('"', '""', $arg) .  '"';
+}
+
+function array_append(&$a1, $a2)
+{
+  if (is_array($a1))
+    array_splice($a1, count($a1), 0, $a2); 
+  else
+    $a1 = $a2;
 }
 
 ?>
