@@ -823,19 +823,15 @@ class FileRevision
         $this->diff = null;
         $this->next =& $previous;
         $previous->diff =& $this;
-        if ($previous->contents === false)
-          $previous->contents = $this->contents;
       }
       else
       {
         $this->diff =& $previous;
         $this->next = null;
-        $previous->next =& $this;
-        if ($this->contents === false)
-          $this->contents = $previous->contents;
-        if ($previous->isZero)
-          $parent->branches[] =& $this;
+        $previous->next =& $this; 
       }
+      if ($this->contents === false) $this->contents = $previous->contents;
+      if ($previous->isZero) $parent->branches[] =& $this;
     }
     else // !isset($previous)
     {
@@ -857,7 +853,6 @@ class FileRevision
             $parent->nextVendorBranch +=2;
           }
         }
-
         $this->diff =& $parent;
         $this->next = null;
         if ($this->contents === false) $this->contents = $parent->contents;
