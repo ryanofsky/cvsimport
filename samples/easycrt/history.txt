@@ -1,0 +1,413 @@
+1.1 wincrt
+WINCRT.PAS
+- Original WinCRT
+
+1.2 russcrt
+russcrt.pas
+- Based on WINCRT.PAS, originally used in Area! program
+- Changed Window Title
+- Added text color
+- Changed text font
+- Added Initdraw and StopDraw
+- Maximized Window
+- All drawing functions are within Area! Program
+
+WINCRT.PAS
+replaced by russcrt.pas
+
+1.3
+easycrt.pas
+- Based on russcrt.pas
+- More Library Includes
+- New Global Variables
+- Color Constants
+- added initdraw, stopdraw, drawpicture, circle,
+  line, settitle, pc, rgb, setfont, pprint
+- all drawing functions take dc parameter
+
+easydemo.pas demobmp.bmp
+- Unreleased backup file
+- Simplistic demo that shows line, circle and text
+- Comments include reference documentation
+
+russcrt.pas
+replaced by easycrt.pas
+
+1.4 version_1_02
+easycrt.pas easydemo.pas
+- added version number
+
+setup.bat setup.scp system/TPW.CFG system/tpw.ini
+- added installation files
+
+1.5
+easycrt.pas
+- Based on wincrt.pas
+- Calculator Resource Reference Added
+- Changes marked with RWH and <RUSS>
+- 29 Rows on Screen, Changed Title Format
+- HDC and BMP
+- old functions kept for compatability
+- new functions: getred, getgreen, getblue,
+  gradient, txt, setpen, setbrush, qline, qcircle,
+  qarc, pset, pixel, fill, connectdots, shape,
+  box, loadbmp, drawbmp, deletebmp, getwidth,
+  getheight, maskbmp, inkey, delay, fullscreen
+  (broken), windowscreen (broken)
+
+clc.res
+- holds icon for easycrt programs
+
+setup.bat system/Britanic.ttf
+- added font for new demo
+
+system/tpw.cfg
+- added easycrt to installation folder to resource search path
+
+easydemo.pas bomb.bmp bombmask.bmp cool1.bmp cool2.bmp cool3.bmp cool4.bmp cool5.bmp cool6.bmp cool7.bmp cool8.bmp easy.bmp homer.bmp
+- Brand new demo with slideshow showing new bitmap commands and drawing commands
+- Documentation reorganized and updated with new function information
+
+testback.bmp
+- added for no apparent reason
+
+demobmp.bmp
+- deleted, no longer used by easydemo.pas
+
+1.6 version_2_0
+easycrt.pas easydemo.pas
+- added version number
+
+1.7 version_2_01 garett-fork
+
+easycrt.pas
+- Added: unfreeze, inkeyasc
+- Fixed: delay (now uses unfreeze)
+- Fixed: inkey (cancelled arrow scrolling, uses unfreeze)
+
+easydemo.pas
+- updated documenation
+- changes for fixed key handling interface
+
+1.7.2.1 garett_1
+EASYCRT2.PAS
+- Based on easycrt.pas version_2_01
+- 'points' type declaration is made public, some new public variables
+   are declared to hold mouse information
+- rgb function is renamed to rgb2, deals with overflow of channel values
+- delay function now takes real parameter instead of longint
+- added GetBkup, PutBkup, image - allows for mass pixel storage
+- added some virtual key constants key_
+- min, max defined for longint rather than int and made public
+- modifications in WindowPaint avoid painting of invisible characters
+- optimizations to getred, getgreen, getblue
+- fixed gradient function
+- added dc handle accessor function
+
+1.7.2.2 garett_2
+EASYCRT2.PAS
+- Requested Font width is set to size/2 instead of 0
+
+EASYCRT3.PAS
+- Based on easycrt2.pas garett_2
+- Modified Inactive Title
+- Added MouseLoc to tell current mouse position
+- Shrunk pixel mass storage space
+- Added GetBkup2, PutBkup2, bx2
+- deleted Cursor and Origin constants and large blocks of
+  code dealing with Caret, Scrolling, Cursor, and Text Output
+- Added TheWindow function to expose window handle
+
+1.8 version_3_0
+system/Britanic.ttf system/TPW.CFG system/TPW.ini setup.bat setup.scp
+- deleted installation files
+
+samples/emouse.pas samples/inkey.pas samples/inkeyasc.pas
+- made some new sample programs
+
+easycrt.pas
+- added virtual key constants
+- added ldown, rdown, mousepos, windowpos, mousex,
+  mousey, getkeystate, showcursor, hidecursor
+- modified fullscreen (still broken)
+- modified inkeyasc
+- mouse is constrained to window when it is dragged
+
+1.9
+/^html\\\/.*$/i
+- new documentation for science fair
+
+easydemo.pas
+- reference documentation removed from comments
+- hid my name for science fair
+- minor changes to work with new version of easycrt
+
+easygdi.pas
+- based on drawing functions from stickfighter version_1_0
+- functions have been reordered and prefixed with 'a' for advanced
+  to distinguish them from EasyCRT functions.
+- makeDC can now use preexisting DC handles
+- added setbmp function
+- atxt function now understands align value of 0
+- added Aconnectdots, Ashape, Apset, Apixel, Afill
+- the bmp file routines are moved into the loadbmp function
+- paint and maskbmp functions have been totally revamped
+- drawbmp and drawpicture implemented in terms of new paint function
+- added deletebmp function
+- defreeze function removed
+- many functions have been reordered
+
+easycrt.pas
+- Complete Rewrite from WINCRT.PAS. Included most
+  features from version 3.0.
+- No longer backwards compatible, EasyCRT 1.x
+  commands are eliminated
+- Modified Connectdots, Setpen, Setbrush, Txt
+- Added Getlng, Startdelay, Finishdelay, FileOpen,
+  FileSave, apppath, gettitle, minimize, maximize,
+  restore, show, hide, setpos, setsize, getpos,
+  setborder, resetkeys, getclick, dchandle,
+  windowhandle, appinstance
+- Removed cursor constraints that were added in previous revision
+
+easy.res
+- holds easycrt icon
+
+clc.res
+- replaced by easy.res
+
+testback.bmp
+- removed unused file
+
+samples/howlong.pas
+- prints system uptime
+
+1.10 version_3_2
+
+html/crtsrc.html
+- added "back to top" link
+
+html/commands.html
+- various corrections to the text
+- added "back to top" link
+
+samples/emouse.pas samples/howlong.pas samples/inkey.pas
+- spiffied up for science fair
+
+1.10.2.1
+/^samples\\\/chris\\\/.*$/i /^samples\\\/commands\\\/.*$/i /^samples\\\/garett\\\/.*$/i /^samples\\\/greg\\\/.*$/i /^samples\\\/marc\\\/.*$/i /^samples\\\/pong\\\/.*$/i
+- sample programs for demo page
+
+/^samples\\\/stick\\\/.*$/i
+- stickfighter sample program
+- corresponds to tag scifair_98 in stickfighter repository
+
+easycrt2.pas
+- based on easycrt.pas version_3_0
+- unit renamed from easycrt to easycrt2
+- reference to clc.res removed
+- no other changes, not sure where this file came from
+
+easycrt3.pas
+- based on easycrt.pas version_3_0
+- unit renamed from easycrt to easycrt3
+- reference to clc.res removed
+- reference to easygdi added
+- no other changes, not sure where this file came from
+
+/^scifair\\\/.*$/i
+- science fair documents, report, and slideshow
+
+crttest.pas crtdemo.pas e.bmp easycrt.bmp easycrt.hfx logo.HFX
+- miscellaneous science fair files
+
+1.11 version_3_3
+easycrt.pas
+- exposed DC as public variable
+
+1.12
+easycrt.pas
+- DC is made a private variable again
+- window dimensions can now be set at runtime
+- setborder can now show and hide frame buttons
+- DC is deleted on window close instead of program termination
+- window is no longer started maximized
+
+1.13
+easycrt.pas
+- simplified setborder
+
+1.14
+easycrt.pas
+- added propersize, setscreensize, setbehave
+- added functionality to getpos, getnewpos
+
+1.15
+easycrt.pas
+- added clearcolors, makecolors, getFcolor, getBcolor, killcolors
+
+1.16 version_4_0
+
+html/oldcommand.html
+- based on command.html, but with many changes to content and appearance
+
+/^html\\\/.*$/i
+- updated docs and report
+
+easycrt.pas
+- removed graphics functions and just export a BMP variable called CRT that can be used with EasyGDI functions.
+- added constants for virtualkeys and some functions which take fixed values
+- replaced clearcolors, makecolors, getFcolor, getBcolor and killcolors
+  with setcolors, colorspot, colorspots, getspotFcolor, getspotBcolor
+- added getbehave
+
+bitmaps.pas
+- functions for reading and writing bmp files
+- not my code, from borland's sample programs
+
+easygdi.pas
+- replaced SDC type with BMP type and used different resource management strategy
+- 'A' prefix removed from graphics functions
+- defined many constants for use with functions
+- new functionality added: ie wrapping text
+- many more changes
+
+/^samples\\\/title\\\/.*$/i
+- animates new easycrt logo
+
+/^samples\\\/stick\\\/.*$/i
+- stickfighter version_1_1
+- uses easygdi.pas from version_3_2
+
+samples/getpos.pas
+- displays easycrt frame parameters
+
+samples/emouse.pas samples/howlong.pas samples/inkey.pas samples/inkeyasc.pas
+- updated for easycrt 4.0
+
+samples/nothing.pas
+- includes easycrt and easygdi
+
+easydemo.pas homer.bmp easy.bmp bomb.bmp bombmask.bmp cool1.bmp cool2.bmp cool3.bmp cool4.bmp cool5.bmp cool6.bmp cool7.bmp cool8.bmp
+- removed old easycrt 2.x demo
+
+/^system\\\/.*\\.ttf$/i
+- fonts included in install
+
+1.17 version_4_01
+
+html/cm.html html/commands.html
+- proofreading
+
+html/oldcommand.html
+- deleted for release
+
+/^samples\\\/masks\\\/.*$/i
+- masks demo which originally appeared in the easycrt 2.x demo updated for new easycrt
+
+/^samples\\\/inanim\\\/.*$/i
+- demonstrates inkey with bitmap animation
+
+samples/title/title.pas
+- got rid of window frame
+- updated use of loadbmp for new easygdi.pas
+
+samples/shape.pas
+- demonstrates double buffering, heavily commented
+
+easycrt.pas
+- no changes except for version number :)
+
+easygdi.pas
+- changed loadbmp to take a compatible bmp parameter.
+  this looks like poor interface decision, at the very least
+  it should keep the old behavior for nil bmps
+
+system/1.bat
+- batch script which installs fonts
+
+system/makeitso.bat
+- deletes easycrt 2.x and installs easycrt 3.x
+- the easycrt.exe referenced inside was a winzip self-extracting archive
+
+samples/title/ym.bmp
+- cleaned up lower left corner of mask
+
+1.18 version_4_02
+/^html\\\/report\\\/.*$/i
+- renamed image files with frontpage, no changes to report text
+
+/^html\\\/.*$/i
+- proofreading and documentation updates
+
+/^samples\\\/demo\\\/.*$/i
+- super spiffy demo program made up of preexisting animations and a few new ones
+
+/^samples\\\/homer\\\/.*$/i
+- remake of Marc Huffnagle's shoot homer screen
+- not suitable for children
+- I should have given credit in the program
+
+samples/gback.pas
+- Garett Nell's cool background
+- I have no idea how this works
+- I should have given credit in the program
+
+samples/stars.pas samples/wavetext.pas
+- new demos
+
+samples/emouse.pas
+- colors green when both buttons pressed
+
+samples/nothing.pas
+deleted
+
+easy.ico
+- 'E' icon for windows shortcuts
+
+easycrt.pas
+- set inkey value to 0 when window loses focus
+- FileOpen and FileSave now take wildcard parameter instead of extension parameter
+
+easygdi.pas
+- added getfont, isbmp
+- added some new kind of encapsulated DC functionality
+- FileOpen and FileSave now take wildcard parameter instead of extension parameter
+
+system/1.bat system/makeitso.bat
+- deleted, replaced by installshield installer
+
+/^system\\\/installshield\\\/.*$/i
+- installshield project files
+
+samples/stick/STICK.EXE
+- stickfighter executable included with the installshield install
+  (no other executable besides this was included)
+
+1.19
+easygdi.pas
+- added clipto, cliptorect, clearclip, ishappyptr
+
+maths.pas
+- added some math library I found on the internet
+
+1.20
+/^html\\\/demolink\\\/.*$/i
+- web shortcuts
+
+/^html\\\/.*$/i
+- updated for science fair
+
+/^system\\\/filerun\\\/.*$/i
+- attempt to run programs and control turbo pascal from web links
+
+easygdi.pas
+- added gettextoffsetx, gettextoffsety
+
+maths.pas
+- modified to use reals instead of doubles
+- replaced some of the uppercase with lowercase
+
+1.20.2.1
+/^.*$/i
+- Science fair 99
