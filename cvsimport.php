@@ -236,6 +236,7 @@ class NodeList
       $fnodes = $this->nodes;
       $isbinary = is_binary(substr($filename,1));
       print(($isbinary ? "B" : "A") .  " $filename ... ");
+      flush();
       $this->preparenodes($filename, $isbinary, $fnodes, $head);
       $this->writeRCS($filename, $isbinary, $fnodes, $head);
       print("Done.\n");
@@ -601,26 +602,19 @@ $DEFAULT_AUTHOR = "russ";
 
 $VERSIONS = array
 (
-  new RCSNode("L:/server/shares/russ.hn.org/jica", "1.1", "REALLYOLD", "", "citrix java ica client"),
-);
+  new RCSNode("E:/Documents/2002-02/2/Database/000/0",          "1.1", "i1", "", "" ),
+  new RCSNode("E:/Documents/2002-02/2/Database/000/2",          "1.3", "i2", "", "" ),
+  new RCSNode("E:/Documents/2002-02/2/Database/000/3 (submit)", "1.4", "submit", "", "" ),
+  new RCSNode("E:/Documents/2002-02/2/Database/000/4",          "1.5", "i3", "", "" ),
+  new RCSNode("E:/Documents/2002-02/2/Database/000/now",        "1.6", "i4", "", "" )
+); 
 
-$OUTDIR = "L:/server/shares/russ.hn.org/out";
+$OUTDIR = "E:/Documents/2002-02/2/Database/000/out";
 
-function is_binary($filename)
+function is_binary($name)
 {
-  global $is_binary_endings;
-  for($i = -3; $i >= -5; --$i)
-    if (isset($is_binary_endings[substr($filename, $i)])) return false;
-  return strpos($filename,".") !== false && !ends_with($filename,".backup") && !ends_with($filename,".working");
+  return false;
 }
-
-$is_binary_endings = array
-(
-  ".html" => 1, ".php"  => 1, ".inc"  => 1, ".bak" => 1, ".asp" => 1, ".asa" => 1,
-  ".~dfm" => 1, ".~dpr" => 1, ".~pas" => 1, ".cfg" => 1, ".cls" => 1, ".dfm" => 1,
-  ".dof"  => 1, ".hack" => 1, ".eml"  => 1, ".js"  => 1, ".new" => 1, ".old" => 1,
-  ".pas"  => 1, ".prj"  => 1, ".scc"  => 1, ".txt" => 1, ".vbp" => 1, ".vbw" => 1
-);
 
 /*                         END SCRIPT CUSTOMIZATIONS                         */
 ///////////////////////////////////////////////////////////////////////////////
