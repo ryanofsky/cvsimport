@@ -25,12 +25,13 @@ if ($nl->warned)
   print("\n\nWarnings have been issued. Please correct any problems and try again.\n\n");
   exit();
 }
-else
-{
-  $BLANKFILE = tempnam("","");
-  $nl->scan();
-  $nl->save();
-  unlink($BLANKFILE);
-}
+
+$BLANKFILE = tempnam("","");
+$nl->scan();
+$nl->save();
+unlink($BLANKFILE);
+if (function_exists('CleanUp')) CleanUp();
+
+$nl->checkout();
 
 ?>
