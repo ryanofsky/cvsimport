@@ -236,7 +236,6 @@ class NodeList
       $fnodes = $this->nodes;
       $isbinary = is_binary(substr($filename,1));
       print(($isbinary ? "B" : "A") .  " $filename ... ");
-      flush();
       $this->preparenodes($filename, $isbinary, $fnodes, $head);
       $this->writeRCS($filename, $isbinary, $fnodes, $head);
       print("Done.\n");
@@ -600,16 +599,31 @@ function array_eq($a, $b, $depth)
 
 $DEFAULT_AUTHOR = "russ";
 
+include("L:/temp/database/logs");
+
 $VERSIONS = array
 (
-  new RCSNode("E:/Documents/2002-02/2/Database/000/0",          "1.1", "i1", "", "" ),
-  new RCSNode("E:/Documents/2002-02/2/Database/000/2",          "1.3", "i2", "", "" ),
-  new RCSNode("E:/Documents/2002-02/2/Database/000/3 (submit)", "1.4", "submit", "", "" ),
-  new RCSNode("E:/Documents/2002-02/2/Database/000/4",          "1.5", "i3", "", "" ),
-  new RCSNode("E:/Documents/2002-02/2/Database/000/now",        "1.6", "i4", "", "" )
+  new RCSNode("L:/temp/database/1.01"    , "1.01"    , $tag_1_1     , "", $log_1_1 ),
+  new RCSNode("L:/temp/database/1.02"    , "1.02"    , $tag_1_2     , "", $log_1_2 ),
+  new RCSNode("L:/temp/database/1.03"    , "1.03"    , $tag_1_3     , "", $log_1_3 ),
+  new RCSNode("L:/temp/database/1.04"    , "1.04"    , $tag_1_4     , "", $log_1_4 ),
+  new RCSNode("L:/temp/database/1.04.2.1", "1.04.2.1", $tag_1_4_2_1 , $bta_1_4_2_1, $log_1_4_2_1),
+  new RCSNode("L:/temp/database/1.05"    , "1.05"    , $tag_1_5     , "", $log_1_5 ),
+  new RCSNode("L:/temp/database/1.06"    , "1.06"    , $tag_1_6     , "", $log_1_6 ),
+  new RCSNode("L:/temp/database/1.07"    , "1.07"    , $tag_1_7     , "", $log_1_7 ),
+  new RCSNode("L:/temp/database/1.08"    , "1.08"    , $tag_1_8     , "", $log_1_8 ),
+  new RCSNode("L:/temp/database/1.09"    , "1.09"    , $tag_1_9     , "", $log_1_9 ),
+  new RCSNode("L:/temp/database/1.10"    , "1.10"    , $tag_1_10    , "", $log_1_10),
+  new RCSNode("L:/temp/database/1.11"    , "1.11"    , $tag_1_11    , "", $log_1_11),
+  new RCSNode("L:/temp/database/1.12"    , "1.12"    , $tag_1_12    , "", $log_1_12),
+  new RCSNode("L:/temp/database/1.13"    , "1.13"    , $tag_1_13    , "", $log_1_13),
+  new RCSNode("L:/temp/database/1.14"    , "1.14"    , $tag_1_14    , "", $log_1_14),
+  new RCSNode("L:/temp/database/1.14.2.1", "1.14.2.1", $tag_1_14_2_1, $bta_1_4_2_1, $log_1_14_2_1),
+  new RCSNode("L:/temp/database/1.15"    , "1.15"    , $tag_1_15    , "", $log_1_15),
+  new RCSNode("L:/temp/database/1.16"    , "1.16"    , $tag_1_16    , "", $log_1_16)
 ); 
 
-$OUTDIR = "E:/Documents/2002-02/2/Database/000/out";
+$OUTDIR = "L:/temp/database/out";
 
 function is_binary($name)
 {
