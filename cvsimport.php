@@ -22,8 +22,8 @@ define("MODE_TEXT", 1);
 // server happens to use the UNIX format internally.
 define("MODE_SAFETEXT", 2);
 
-// on unix, this is equivalent to MODE_SAFETEXT, on PC and MAC this is almost
-// exactly the same as MODE_TEXT. This mode can be used on text files that
+// on unix, this is equivalent to MODE_SAFETEXT, on PC and MAC this should be
+// the same as MODE_TEXT. This mode can be used on text files that
 // are in the format corresponding to the current operating system. The script
 // will open these files in "rt" mode and allow the system's C library to perform
 // and translations. This mode is included for completeness only, there shouldn't
@@ -38,46 +38,9 @@ define("MODE_TRANSLATE_MASK", 3);
 // file is marked as MODE_BINARY, this flag will be ignored.
 define("MODE_SUBSTITUTION", 4);
 
+define("PRUNE_DISABLED");
+
 $mode_abbrevs = array(MODE_BINARY => 'b', MODE_TEXT => 't', MODE_SAFETEXT => 's', MODE_NATIVETEXT => 'v');
-
-class File
-{
-  var $path;
-  var $mode;
-  var $submode;
-  
-  function File($path)
-  {
-    $this->path = $path;
-  }
-};
-
-class FileRevision
-{
-  var $exists = false;
-  var $revision = array();
-  var $tag = array();
-  var $btag = '';
-  var $date = 0;
-  var $author = '';
-  var $state = '';
-  var $branches = array();
-  var $placeholder = false;
-  var $next = false;
-  var $diff = false;
-  var $log = '';
-  var $filename;
-  var $temporary = false;
-
-  var $branchno;
-  function FileRevision()
-  {
-    global $BLANKFILE;
-    $this->filename = $BLANKFILE;
-  }
-};
-
-
 
 class Revision
 {
@@ -91,15 +54,10 @@ class Revision
   
   // internal variables:
 
-  var $srevision; // stringified revision number
-  var $revision; // cvs revision as an array of integers
+  var $snumber; // stringified revision number
+  var $number; // cvs revision as an array of integers
   var $date = false; // date of the newest file
-  var $branches = array();
-  var $next = false;
-  var $diff = false;
-  var $posterior = false;
-  var $anterior = false;
-
+ 
   function Revision($directory, $tag, $btag, $log = '', $author = '')
   {
     GLOBAL $DEFAULT_AUTHOR, $BLANKFILE;
@@ -112,13 +70,371 @@ class Revision
   }
 }
 
-class NodeList
+class File
+{
+  var $path;
+  var $mode;
+  var $submode;
+  var $defaultBranch = false;
+  var $headRevision = false;
+  var $revisions = array();
+  var $zeroBranches = array();
+  
+  // When a file doesn't exist at all on a particular
+  // branch but does exist in one of the branch's 
+  // ancestor revisions, the default behavior (pruneBranches) is
+  // to mark the file as being deleted for the branch
+  // When pruneBranches is true, the branch tag is completely
+  // left out of the RCS file, saving a little space.
+  
+  var $pruneBranches = false;
+  
+  // array of branch numbers (arrays of odd length)
+  // indexed by branch tags
+  var $zeroBranches = array();
+  
+  function File($path)
+  {
+    $this->path = $path;
+  }
+  
+  function prepareNodes(&$versions, $prune) // set up nodes for a particular file
+  {
+    $history = array();
+
+    foreach(array_keys($versions) as $i)
+    {
+      $version = &$versions[$i];
+      $depth = count($version->number);
+
+      if ($version->number == array(1,1,1,1)) $file->defaultBranch = $i;
+
+      // $pa is the index of this branch's parent node
+      // $pr is the index of the previous node on the current branch
+      $pa = variable_get($history[$depth - 2], false);
+      $pr = variable_get($history[$depth], false);
+      if ($pr && $depth > 2 && !array_eq($version->number, $versions[$pr]->number, $depth-1))
+        $pr = false;
+
+      $needsBranchTag = false;
+
+      $revision =& new FileRevision();
+      unset($prevision);
+
+      // set revisions's revision, prev, and diff members
+
+      if($depth == 2) // revision is on the main trunk
+      {
+        if ($pr === false)
+        {
+          $revision->number = array(1,1);
+        }
+        if ($pr !== false) // not the very first revision
+        {
+          $prevision =& $this->revisions[$pr];
+          $prevision->diff = $i;  // because this is the main trunk use a reverse diff 
+          $revision->next = $pr;  // and point backwards to the previous revision
+          $revision->number = $prevision->number;
+          ++$revision->number[1];
+        }
+      }
+      else if($pr !== false)
+      { // not the first revision on a branch
+        $prevision =& $this->revisions[$pr];
+        $revision->diff = $pr;   // use a forward diff on a branch
+        $prevision->next = $i;   // previous node points to this one
+        $revision->number = $prevision->number;
+        ++$revision->revision[$depth-1];
+      }
+      else if($pa === false)
+        warning("\"$version->snumber\" needs a parent node to branch off of. Either change its version number or add in a new node (even an empty one will do) like a \"" . implode(".",array_slice($version->number,0,$depth-2)) . "\"" . ( $version->number[$depth-3] != 1 ? " or a \"" . implode(".",array_slice($version->number,0,$depth-3)) . ".1\"": "") . ".");
+      else // first revision on a branch
+      {
+        $prevision =& $this->revisions[$pa];
+        $revision->diff = $pa;
+        $prevision =& $file->revisions[$pa];
+        
+        if ($node->revisons[$depth-2] % 2 == 0)
+        {
+          array_push($revision->number, $prevision->branchNo, 1);
+          $prevision->branchNo += 2;
+        }
+        else
+        {
+          array_push($revision->number, $prevision->vendorBranchNo, 1);
+          $prevision->vendorBranchNo +=2;
+        }
+        $needsBranchTag = true;
+      }
+
+      if (!$needsBranchTag && strlen($version->btag) > 0)
+        warning("You supplied a branch tag for version \"$version->snumber\" that cannot be used because this version is not at the head of a new branch. You need to set it to the empty string (\"\") or false.");
+      else if ($needs_branch_tag && strlen($node->btag) == 0)
+        warning("Because version \"$version->snumber\" is at the head of a new branch, you must give it a branch tag");
+
+      // set exists, filename, date, exists, state, placeholder fields
+      // if pruning is enabled, find out whether to keep this revision
+      
+      $keep = !$prune;
+      $revision->filename = $version->directory . $this->path;
+      
+      if (file_exists($revision->filename))
+      {
+        $revision->exists = true;
+        $revision->date = filemtime($revision->filename);
+        $revision->filename = translate_file($revision->filename, $mode, $revision->temporary);
+        if ($prevision->exists)
+        {
+          $f1 = escapeshellargs($prevision->filename);
+          $f2 = escapeshellargs($revision->filename);
+          if (`diff -q --binary "$f1" "$f2"`) $keep = true;
+        }
+        else
+          $keep = true;
+      }
+      else // file_not_exists
+      {
+        $revision->exists = false;
+        // the diff for a deleted file should be empty, avoid
+        // making this a special case by pointing diff to the
+        // previous filename
+        $revision->date = $node->lastDate;
+        $revision->filename = $prevision->filename;
+        if ($prevision->exists) $keep = true;
+      }
+
+      // xxx: what about placeholder revision? (while a file
+      // is originally added on a branch, its ancestors are
+      // placeholder nodes
+      
+      if($keep)
+      {
+        if ($needsBranchTag)
+        {
+          
+        }
+        $revision->state = $revision->exists ? "Exp" : "dead";
+        if ($node->posterior === $node->next) // cheesy way to see if the node is on the main thrunk
+          $head = $i;
+        $this->revisions[$i] =& $revision;
+        $history[$depth] = $i;
+      }
+      else // this is a redundant or possibly node
+      {
+        if ($pr === false)
+        {
+          $parevision->zeroBranches = array_slice($revision->number, 0, -1)
+        }
+        else
+        {
+          
+        }
+        
+        if($node->btag)
+        {
+          if ($node->anterior === false && $prevision->placeholder && count($prevision->branches) == 1)
+          {
+            $this->deletenode($frevisions,$node->posterior);
+            $node->posterior = false;
+            unset($pnode);
+          }
+          else
+          {
+            $f = array_search($i,$pnode->branches);
+            if ($node->anterior !== false)
+            {
+              $pnode->branches[$f] = $node->anterior;
+              $frevisions[$node->anterior]->btag = $node->btag;
+            }
+            else
+              unset($pnode->branches[$f]);
+          }
+        }
+
+        if (isset($pnode) && $node->date < $pnode->date)
+        {
+          $pnode->date = $node->date;
+          $pnode->log = $node->log;
+          $pnode->author = $node->author;
+        }
+
+        $this->deletenode($frevisions,$i);
+
+      }
+    }
+    if (!$this->headRevision) warning("The CVS is tree is all branches and no trunk! CVS requires that you have at least one revision on the trunk to serve as the \"HEAD\" revision which is what all the other diffs in the file are ultimately based on. If you are sure you do not want any of your revisions to be on the trunk, you need to create a 1.1 revision and point it to a blank directory. If you are trying to emulate the results of a fresh CVS import command (which puts the files on vendor revision 1.1.1.1 AND on the trunk) just do these things: 1)Create a new 1.1 revision. 2)Point it to the same directory as your 1.1.1.1 revision. 3)Set the log entry to \"Initial revision\". 4)The branch tag on the 1.1.1.1 revision is equivalent to the \"vendor-tag\" argument of the CVS import command, so set that however you like it. 5)Do not create a tag for the 1.1 revision. Instead of a string, put false.");
+  }
+
+  function writeRCS($outdir)
+  {
+    if (!$this->revisions[$head]->exists)
+    {
+      $p = strrpos($filename,"/");
+      $folder = substr($filename,0,$p) . "/Attic";
+      @mkdir("$outdir$folder");
+      $filename = "$folder/" . substr($filename,$p+1);
+    }
+
+    $fp = @fopen("$outdir$filename,v","wb") or die("Failed to open \"$outdir$filename,v\" for writing in " . __FILE__ . " on line " . __LINE__);
+
+    fwrite($fp, "head\t" . implode(".",$this->revisions[$this->headRevision]->nrevision) . ";\n");
+    if ($this->defaultBranch !== false && isset($this->revisions[$this->defaultBranch]))
+      // XXX: apparently printing revision number not branch number
+      fwrite($ftp, "branch\t" . implode(".",$this->revisions[$this->defaultBranch]->number) . ";\n");
+
+    fwrite($fp, "access\t;\n");
+    fwrite($fp, "symbols\t");
+
+    $keys = array_reverse(array_keys($this->revisions));
+
+    foreach($keys as $i)
+    {
+      $revision =& $this->revisions[$i];
+      if ($revision->exists) // it should not be strictly neccessary to skip tags for dead files, but this seems to conform with observed cvs behavior
+      foreach($revision->tags as $tag)
+      if (strlen($tag) > 0)
+        fwrite($fp, "\n\t$tag:" . implode(".", $this->revisions[$i]->nrevision));
+      if (strlen($revision->btag) > 0)
+      {
+        if ($revision->exists || $this->next !== false || count($this->branches > 0) || !$this->pruneBranches)
+        fwrite($fp, "\n\t" . $this->revisions[$i]->btag . ":" . implode(".", array_slice($this->revisions[$i]->nrevision,0,-1)));
+      }
+    }
+    fwrite($fp,";\n");
+
+    fwrite($fp, "locks\t;\nstrict\t;\ncomment\t@# @;\n");
+    if ($mode == MODE_BINARY) fwrite($fp, "expand\t@b@;\n"); else fwrite($fp, "expand\t@o@;\n");
+    fwrite($fp, "\n\n");
+
+    foreach($keys as $i)
+    {
+      fwrite($fp, implode(".", $this->revisions[$i]->nrevision) . "\n");
+      fwrite($fp, "date\t" . gmdate("Y.m.d.H.i.s",$this->revisions[$i]->date) . ";\tauthor " . $this->revisions[$i]->author . ";\tstate " . $this->revisions[$i]->state . ";\n");
+      fwrite($fp, "branches\t");
+      foreach($this->revisions[$i]->branches as $branch)
+        fwrite($fp, "\n\t" . implode(".", $this->revisions[$branch]->nrevision));
+      fwrite($fp, ";\n");
+
+      $next = $this->revisions[$i]->next === false ? "" :implode(".", $this->revisions[$this->revisions[$i]->next]->nrevision);
+      fwrite($fp, "next\t$next;\n\n");
+    }
+    fwrite($fp, "desc\n@@\n\n");
+
+    $GLOBALS['NODE_BODY_COMPARE_LIST'] = $this->revisions;
+    usort($keys, "node_body_compare");
+
+    foreach($keys as $i)
+    {
+      fwrite($fp, implode(".", $this->revisions[$i]->nrevision) . "\n");
+      fwrite($fp, "log\n@");
+      if ($this->revisions[$i]->placeholder)
+      {
+        $p = strrpos($filename,"/");
+        $thefile = $p === false ? $filename : substr($filename,$p+1);
+        reset($this->revisions[$i]->branches);
+        $thebranch = current($this->revisions[$i]->branches);
+        fwrite($fp, "file " . str_replace("@", "@@", $thefile) . " was initially added on branch " . $thebranch->btag);
+      }
+      else
+        fwrite($fp, str_replace("@", "@@", $this->revisions[$i]->log));
+      fwrite($fp, "@\ntext\n@");
+
+      if ($this->revisions[$i]->diff !== false)
+        $pp = popen("diff -n -a --binary \"" . $this->revisions[$this->revisions[$i]->diff]->filename . " \" \"" . $this->revisions[$i]->filename . "\"","rb");
+      else
+        $pp = fopen($this->revisions[$i]->filename,"rb");
+
+      while(!feof($pp))
+      {
+        $buffer = fread($pp, 8192);
+        fwrite($fp, str_replace('@','@@', $buffer));
+      }
+
+      if ($this->revisions[$i]->diff !== false) pclose($pp); else fclose($pp);
+      fwrite($fp, "@\n\n");
+    }
+    fclose($fp);
+
+
+    foreach($keys as $i)
+    {
+      if ($this->revisions[$i]->temporary)
+        unlink($this->revisions[$i]->filename);
+    }
+  }
+  
+  function DeleteNode($i)
+  {
+    $revision =& $this->revisions[$i];
+
+    if ($revision->temporary) unlink($revision->filename);
+
+    if ($revision->next !== false)
+      $this->revisions[$revision->next]->diff = $revision->diff;
+
+    if (!$revision->btag && $revision->diff !== false)
+      $this->revisions[$revision->diff]->next = $revision->next;
+
+    if ($revision->anterior !== false)
+      $this->revisions[$revision->anterior]->posterior = $revision->posterior;
+
+    if (!$revision->btag && $revision->posterior !== false)
+      $this->revisions[$revision->posterior]->anterior = $revision->anterior;
+
+    if ($revision->posterior !== false)
+    {
+      $t =& $this->revisions[$revision->posterior]->tag;
+      $b =& $this->revisions[$revision->posterior]->branches;
+      // push tag
+      array_splice($t,0,0,$revision->tag);
+      // push branches
+      array_splice($b,count($b),0,$revision->branches);
+      unset($t,$b);
+    }
+
+    foreach($revision->branches as $b)
+      $this->revisions[$b]->diff = $this->revisions[$b]->posterior = $revision->posterior;
+
+    unset($this->revisions[$i]);
+  }
+};
+
+class FileRevision
+{
+  var $revision = array();
+  var $next = false;
+  var $diff = false;
+  
+  var $branchNo = 2; // next available child branch number to use in NodeList::prepareNodes()
+  var $vendorBranchNo = 1; // next available vendor branch number
+  var $branches = array();
+
+  var $filename;
+  var $exists = false;
+  var $tag = array();
+  var $btag = '';
+  var $date = 0;
+  var $author = '';
+  var $state = '';
+  var $placeholder = false;
+  var $log = '';
+  
+  var $temporary = false;
+ 
+  function FileRevision()
+  {
+    global $BLANKFILE;
+    $this->filename = $BLANKFILE;
+  }
+};
+
+class VersionList
 {
   var $nodes;   // associative array of nodes
   var $files;   // associative array of all files that ever existed in the project. file paths are indices
   var $folders; // associative array of all folders that ever existed in the project. folder paths are indices
 
-  var $defaultbranch; // array index of the head of the RCS default branch
+  var $defaultBranch; // array index of the head of the RCS default branch
 
   var $prune; // if set to true, new revision numbers will only be assigned to a file when it has been modified
 
@@ -127,23 +443,22 @@ class NodeList
   function NodeList($nodes)
   {
     $this->prune = true;
+    $this->pruneFirstBranch = false;
     $this->defaultbranch = false;
 
-    uasort($nodes, "node_compare");
-    $history = array();
-
-    foreach(array_keys($nodes) as $i) // traverse the sorted list and fill in the next, diff, and branches members
+    foreach(array_keys($nodes) as $i)
     {
       $node =& $nodes[$i];
-   
-      $revision = $node->revision = array_map("make_integer",explode(".", $i));
-      $srevision = $node->srevision = implode('.', $revision);
+
+      $node->revision = array_map("make_integer",explode(".", $i));
+      $node->srevision = implode('.', $revision);
       $depth = count($node->revision);
+
       if ($depth < 2)
         warning("\"$i\" is not a valid revision number. Revision numbers be series of digits separated by dots like 1.2, 1.31, 1.33.5.73, or 44.56 . A revision number has to have at least one dot.");
       else if ($depth % 2 != 0)
         warning("\"$i\" is not a valid revision number. (Revision numbers must have an even number of segments like 1.2 or 1.2.2.3 and NOT like 1.2.3)");
-      else if (in_array(0,$node->revision,true))
+      else if (in_array(0, $node->revision, true))
         warning("\"$i\" is not a valid revision number. None of the numbers in a revision numbers can be zeros.");
   
       foreach($node->tag as $tag)
@@ -152,54 +467,13 @@ class NodeList
   
       if (strlen($btag) > 0 && !valid_tag($btag))
         warning("Revision \"$srevision\" has an invalid branch tag. A tag must begin with a letter and can be followed by letters, numbers, hypens, and underscores. Two reserved words \"BASE\" and \"HEAD\" cannot be used as tag names.");
+    }
+    
+    uasort($versions, "node_compare");
 
-      if ($revision == array(1,1,1,1)) $this->defaultbranch = $i;
 
-      // $pr is the index of the previous node on the current branch
-      // $pa is the index of this branch's parent node
-      $pr = isset($history[$depth]) ? $history[$depth] : false;
-      $pa = isset($history[$depth - 2]) ? $history[$depth - 2] : false;
 
-      $needs_branch_tag = false;
-
-      if($depth == 2) // revision is on the main trunk
-      {
-        if ($pr !== false) // not the very first revision
-        {
-          $nodes[$pr]->diff = $i;   // use a reverse diff because this is the main trunk
-          $node->next = $pr;       // point backwards to the previous revision
-          $node->posterior = $pr;
-          $nodes[$pr]->anterior = $i;
-        }
-      }
-      else if($pr !== false && array_eq($revision,$nodes[$pr]->revision,$depth-1))
-      {
-        $node->diff = $pr;    // use a forward diff on a branch
-        $nodes[$pr]->next = $i;        // previous node points to this one
-        $node->posterior = $pr;
-        $nodes[$pr]->anterior = $i;
-      }
-      else if($pa === false) // problemo
-        warning("\"$srevision\" needs a parent node to branch off of. Either change its revision number or add in a new node (even an empty one will do) like a \"" . implode(".",array_slice($revision,0,$depth-2)) . "\"" . ( $revision[$depth-3] != 1 ? " or a \"" . implode(".",array_slice($revision,0,$depth-3)) . ".1\"": "") . ".");
-      else // this is a new branch
-      {
-        $node->diff = $pa;
-        $nodes[$pa]->branches[] = $i;
-        $needs_branch_tag = true;
-        $node->posterior = $pa;
-      }
-
-      if (!$needs_branch_tag && strlen($node->btag) > 0)
-        warning("You supplied a branch tag for revision \"$srevision\" that cannot be used because this revision is not at the head of a new branch. You need to set it to the empty string (\"\") or false.");
-      else if ($needs_branch_tag && strlen($node->btag) == 0)
-        warning("Because revision \"$srevision\" is at the head of a new branch, you must to give it a branch tag");
-
-      $history[$depth] = $i;
-    };
-
-    if (!isset($history[2])) warning("The CVS is tree is all branches and no trunk! CVS requires that you have at least one revision on the trunk to serve as the \"HEAD\" revision which is what all the other diffs in the file are ultimately based on. If you are sure you do not want any of your revisions to be on the trunk, you need to create a 1.1 revision and point it to a blank directory. If you are trying to emulate the results of a fresh CVS import command (which puts the files on vendor revision 1.1.1.1 AND on the trunk) just do these things: 1)Create a new 1.1 revision. 2)Point it to the same directory as your 1.1.1.1 revision. 3)Set the log entry to \"Initial revision\". 4)The branch tag on the 1.1.1.1 revision is equivalent to the \"vendor-tag\" argument of the CVS import command, so set that however you like it. 5)Do not create a tag for the 1.1 revision. Instead of a string, put false.");
-
-    $this->nodes = $nodes;
+    $this->versions = $versions;
   }
 
   function display()
@@ -289,248 +563,8 @@ class NodeList
 
   // PRIVATE HELPER FUNCTIONS
 
-  function preparenodes($file) // set up nodes for a particular file
-  {
-    $file->revisions = array();
-
-    foreach(array_keys($this->nodes) as $i)
-    {
-      $node = &$this->nodes[$i];
-      $depth = count($node->revision);
-      
-      $fnode = new FileRevision();
-      
-      // establish $pfnode (reference to posterior node) and $node->nrevision (new revision number)
-      if($fnode->posterior === false)
-      {
-        $pfnode =& new FileRevision();
-        $fnode->revision = array($node->revision[0],1);
-      }
-      else
-      {
-        $pfnode =& $file->revisions[$node->posterior];
-        $fnode->revision = $pfnode->revision;
-        if ($node->btag)
-        {
-          // new number should be even or odd just like old number
-          $pfnode->branchno += ((($pnode->branchno % 2 == 0)
-            xor ($node->revision[$depth-2] % 2 == 0)) ? 1 : 2);
-          $fnode->revision[] = $pfnode->branchno;
-          $fnode->revision[] = 1;
-        }
-        else
-          ++$fnode->revision[count($node->nrevision)-1];
-      }
-
-      // find out if this node can be eliminated because it is redundant
-      // set exists, filename, date, exists, state, placeholder fields
-      $keep = false;
-      $fnode->filename = $node->directory . $file->path;
-      if (file_exists($fnode->filename))
-      {
-        $fnode->exists = true;
-        $fnode->filename = translate_file($fnode->filename, $mode, $fnode->temporary);
-        $fnode->date = filemtime($node->filename);
-        if ($pfnode->exists)
-        {
-          $f1 = $pfnode->filename;
-          $f2 = $fnode->filename;
-          if (`diff -q --binary "$f1" "$f2"`) $keep = true;
-        }
-        else
-          $keep = true;
-      }
-      else // file_not_exists
-      {
-        $fnode->exists = false;
-        // the diff for a deleted file tells what the file looked like before it was deleted
-        $fnode->filename = $pfnode->filename;
-        $fnode->date = $node->lastDate;
-        if ($pfnode->exists) $keep = true;
-      }
-
-      if ($node->posterior === false && !$keep && count($fnode->branches) > 0)
-      {
-        $keep = true;
-        // can't delete this node unless all branch nodes are deleted
-        $fnode->placeholder = true;
-      }
-
-      if ($node->btag && $node->exists)
-        $keep = true;
-
-      if (!$this->prune) $keep = true;
-
-      if($keep)
-      {
-        $fnode->state = $fnode->exists ? "Exp" : "dead";
-        if ($node->posterior === $node->next) // cheesy way to see if the node is on the main thrunk
-          $head = $i;
-        $file->node[$i] =& $fnode;
-      }
-      else // this is a redundant node that will be deleted
-      {
-        if($node->btag)
-        {
-          if ($node->anterior === false && $pfnode->placeholder && count($pfnode->branches) == 1)
-          {
-            $this->deletenode($fnodes,$node->posterior);
-            $node->posterior = false;
-            unset($pnode);
-          }
-          else
-          {
-            $f = array_search($i,$pnode->branches);
-            if ($node->anterior !== false)
-            {
-              $pnode->branches[$f] = $node->anterior;
-              $fnodes[$node->anterior]->btag = $node->btag;
-            }
-            else
-              unset($pnode->branches[$f]);
-          }
-        }
-
-        if (isset($pnode) && $node->date < $pnode->date)
-        {
-          $pnode->date = $node->date;
-          $pnode->log = $node->log;
-          $pnode->author = $node->author;
-        }
-
-        $this->deletenode($fnodes,$i);
-
-      }
-    }
   }
 
-  function DeleteNode(&$fnodes, $i)
-  {
-    $node = &$fnodes[$i];
-
-    if ($node->temporary) unlink($node->filename);
-
-    if ($node->next !== false)
-      $fnodes[$node->next]->diff = $node->diff;
-
-    if (!$node->btag && $node->diff !== false)
-      $fnodes[$node->diff]->next = $node->next;
-
-    if ($node->anterior !== false)
-      $fnodes[$node->anterior]->posterior = $node->posterior;
-
-    if (!$node->btag && $node->posterior !== false)
-      $nodes[$node->posterior]->anterior = $node->anterior;
-
-    if ($node->posterior !== false)
-    {
-      $t = &$fnodes[$node->posterior]->tag;
-      $b = &$fnodes[$node->posterior]->branches;
-      array_splice($t,0,0,$node->tag);
-      array_splice($b,count($b),0,$node->branches);
-      unset($t,$b);
-    }
-
-    foreach($node->branches as $b)
-      $fnodes[$b]->diff = $fnodes[$b]->posterior = $node->posterior;
-
-    unset($fnodes[$i]);
-  }
-
-  function writeRCS($filename, $mode, &$fnodes, $head)
-  {
-    global $OUTDIR, $NODE_BODY_COMPARE_LIST;
-
-    if (!$fnodes[$head]->exists)
-    {
-      $p = strrpos($filename,"/");
-      $folder = substr($filename,0,$p) . "/Attic";
-      @mkdir("$OUTDIR$folder");
-      $filename = "$folder/" . substr($filename,$p+1);
-    }
-
-    $fp = @fopen("$OUTDIR$filename,v","wb") or die("Failed to open \"$OUTDIR$filename,v\" for writing in " . __FILE__ . " on line " . __LINE__);
-    $keys = array_reverse(array_keys($fnodes));
-
-    fwrite($fp, "head\t" . implode(".",$fnodes[$head]->nrevision) . ";\n");
-    if ($this->defaultbranch !== false && isset($fnodes[$this->defaultbranch]))
-      fwrite($ftp, "branch\t" . implode(".",$fnodes[$this->defaultbranch]->nrevision) . ";\n");
-
-    fwrite($fp, "access\t;\n");
-    fwrite($fp, "symbols\t");
-
-    foreach($keys as $i)
-    {
-      if ($fnodes[$i]->exists) // it should not be strictly neccessary to skip tags for dead files, but this seems to conform with observed cvs behavior
-      foreach($fnodes[$i]->tag as $tag)
-      if (strlen($tag) > 0)
-        fwrite($fp, "\n\t$tag:" . implode(".", $fnodes[$i]->nrevision));
-      if (strlen($fnodes[$i]->btag) > 0)
-        fwrite($fp, "\n\t" . $fnodes[$i]->btag . ":" . implode(".", array_slice($fnodes[$i]->nrevision,0,-1)));
-    }
-    fwrite($fp,";\n");
-
-    fwrite($fp, "locks\t;\nstrict\t;\ncomment\t@# @;\n");
-    if ($mode == MODE_BINARY) fwrite($fp, "expand\t@b@;\n"); else fwrite($fp, "expand\t@o@;\n");
-    fwrite($fp, "\n\n");
-
-    foreach($keys as $i)
-    {
-      fwrite($fp, implode(".", $fnodes[$i]->nrevision) . "\n");
-      fwrite($fp, "date\t" . gmdate("Y.m.d.H.i.s",$fnodes[$i]->date) . ";\tauthor " . $fnodes[$i]->author . ";\tstate " . $fnodes[$i]->state . ";\n");
-      fwrite($fp, "branches\t");
-      foreach($fnodes[$i]->branches as $branch)
-        fwrite($fp, "\n\t" . implode(".", $fnodes[$branch]->nrevision));
-      fwrite($fp, ";\n");
-
-      $next = $fnodes[$i]->next === false ? "" :implode(".", $fnodes[$fnodes[$i]->next]->nrevision);
-      fwrite($fp, "next\t$next;\n\n");
-    }
-    fwrite($fp, "desc\n@@\n\n");
-
-    $NODE_BODY_COMPARE_LIST = $fnodes;
-    usort($keys, "node_body_compare");
-
-    foreach($keys as $i)
-    {
-      fwrite($fp, implode(".", $fnodes[$i]->nrevision) . "\n");
-      fwrite($fp, "log\n@");
-      if ($fnodes[$i]->placeholder)
-      {
-        $p = strrpos($filename,"/");
-        $thefile = $p === false ? $filename : substr($filename,$p+1);
-        reset($fnodes[$i]->branches);
-        $thebranch = current($fnodes[$i]->branches);
-        fwrite($fp, "file " . str_replace("@", "@@", $thefile) . " was initially added on branch " . $thebranch->btag);
-      }
-      else
-        fwrite($fp, str_replace("@", "@@", $fnodes[$i]->log));
-      fwrite($fp, "@\ntext\n@");
-
-      if ($fnodes[$i]->diff !== false)
-        $pp = popen("diff -n -a --binary \"" . $fnodes[$fnodes[$i]->diff]->filename . " \" \"" . $fnodes[$i]->filename . "\"","rb");
-      else
-        $pp = fopen($fnodes[$i]->filename,"rb");
-
-      while(!feof($pp))
-      {
-        $buffer = fread($pp, 8192);
-        fwrite($fp, str_replace('@','@@', $buffer));
-      }
-
-      if ($fnodes[$i]->diff !== false) pclose($pp); else fclose($pp);
-      fwrite($fp, "@\n\n");
-    }
-    fclose($fp);
-
-
-    foreach($keys as $i)
-    {
-      if ($fnodes[$i]->temporary)
-        unlink($fnodes[$i]->filename);
-    }
-  }
-}
 
 function warning($warning)
 {
@@ -643,6 +677,11 @@ function as_array($v)
 function array_eq($a, $b, $depth)
 {
   return array_slice($a,0,$depth) == array_slice($b,0,$depth);
+}
+
+function variable_get(&$var, $default = NULL)
+{
+  if (isset($var)) return $var; else return $default;
 }
 
 function translate_file($filename, $mode, &$temporary)
