@@ -45,31 +45,18 @@ $DEFAULT_AUTHOR = "Administrator";
 
 $VERSIONS = array
 (
-  new RCSNode("L:\temp\revisions\2001-01-03", "1.1", "OLD_2001-01-03", false, "WCES after Fall 2000 Evaluations"),
-  new RCSNode("L:\temp\revisions\2001-01-15", "1.2", "OLD_2001-01-15", false, "Added PHP Based Oracle and Unstable Question Set Editor"),
-  new RCSNode("L:\temp\revisions\2001-01-25", "1.1.2.1", "OLD_2001-01-03_with-oracle", "OLD_2001-01-03_branch", "Added PHP Based Oracle"),
-  new RCSNode("L:\temp\revisions\2001-02-28", "1.3", "OLD_2001-02-28", false, "Restructuring. Moved some files around."),
-  new RCSNode("L:\temp\revisions\2001-03-10", "1.4", "OLD_2001-03-10", false, "Fixes to the database and import code"),
-  new RCSNode("L:\temp\revisions\2001-03-21", "1.5", "OLD_2001-03-21", false, "Changed capitalization of table names"),
-  new RCSNode("L:\temp\revisions\2001-03-31", "1.6", "OLD_2001-03-31", false, "Fixes to oracle and professor reporting"),
-  new RCSNode("L:\temp\revisions\2001-04-03", "1.7", "OLD_2001-04-03", false, "Changed professor question editor and added search to oracle"),
-  new RCSNode("L:\temp\revisions\2001-04-20", "1.8", "OLD_2001-04-20", false, "Added professor listing, secure login. Opened for final evaluations"),
-  new RCSNode("L:\temp\revisions\2001-04-22", "1.9", "OLD_2001-04-22", false, "Added TA questions"),
-  new RCSNode("L:\temp\revisions\2001-04-30", "1.10", "OLD_2001-04-30", false, "Added mass mailing. Also some reporting fixes."),
-  new RCSNode("L:\temp\revisions\2001-05-19", "1.11", "OLD_2001-05-19", false, "Added TA & ABET reporting.")
-);
-
-$VERSIONS = array
-(
-  new RCSNODE("","1.2","","",""),
-  new RCSNODE("","1.2.2.1","","",""),
-  new RCSNODE("","1.2.2.2","","",""),
-  new RCSNODE("","1.2.2.3","","",""),
-  new RCSNODE("","1.2.4.1","","",""),
-  new RCSNODE("","1.2.4.2","","",""),
-  new RCSNODE("","1.2.4.3","","",""),
-  new RCSNODE("","1.2.4.2.2.1","","",""),
-  new RCSNODE("","1.2.4.2.2.2","","",""),
+  new RCSNode("L:/temp/revisions/2001-01-03", "1.1", "OLD_2001-01-03", false, "WCES after Fall 2000 Evaluations"),
+  new RCSNode("L:/temp/revisions/2001-01-15", "1.2", "OLD_2001-01-15", false, "Added PHP Based Oracle and Unstable Question Set Editor"),
+  new RCSNode("L:/temp/revisions/2001-01-25", "1.1.2.1", "OLD_2001-01-03_with-oracle", "OLD_2001-01-03_branch", "Added PHP Based Oracle"),
+  new RCSNode("L:/temp/revisions/2001-02-28", "1.3", "OLD_2001-02-28", false, "Restructuring. Moved some files around."),
+  new RCSNode("L:/temp/revisions/2001-03-10", "1.4", "OLD_2001-03-10", false, "Fixes to the database and import code"),
+  new RCSNode("L:/temp/revisions/2001-03-21", "1.5", "OLD_2001-03-21", false, "Changed capitalization of table names"),
+  new RCSNode("L:/temp/revisions/2001-03-31", "1.6", "OLD_2001-03-31", false, "Fixes to oracle and professor reporting"),
+  new RCSNode("L:/temp/revisions/2001-04-03", "1.7", "OLD_2001-04-03", false, "Changed professor question editor and added search to oracle"),
+  new RCSNode("L:/temp/revisions/2001-04-20", "1.8", "OLD_2001-04-20", false, "Added professor listing, secure login. Opened for final evaluations"),
+  new RCSNode("L:/temp/revisions/2001-04-22", "1.9", "OLD_2001-04-22", false, "Added TA questions"),
+  new RCSNode("L:/temp/revisions/2001-04-30", "1.10", "OLD_2001-04-30", false, "Added mass mailing. Also some reporting fixes."),
+  new RCSNode("L:/temp/revisions/2001-05-19", "1.11", "OLD_2001-05-19", false, "Added TA & ABET reporting.")
 );
 
 function is_binary($filename)
