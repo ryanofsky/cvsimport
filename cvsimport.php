@@ -597,29 +597,30 @@ function array_eq($a, $b, $depth)
 ///////////////////////////////////////////////////////////////////////////////
 /*                        BEGIN SCRIPT CUSTOMIZATIONS                        */
 
-//$DEFAULT_AUTHOR = "travis";
-  
-//$DEFAULT_AUTHOR = "professor";
-
 $DEFAULT_AUTHOR = "russ";
-  
+
 $VERSIONS = array
 (
-    new RCSNode("M:/robot/russ", "1.1", "tag", "",  "weekend work")
-//  new RCSNode("M:/robot/site", "1.1", "tag", "", "from www site"),
-//  new RCSNode("M:/robot/2001-11-21 19!38!15 vanessa", "1.2", "tag", "", "from vanessa email")
-//  new RCSNode("M:/robot/2001-11-18 12!36!49 -0500 travis", "1.1", "tag", "", "Here's what I came up with for building the visibility graph. The function\ntakes two arrays of adjacency-list pointers (one empty, one populated with\nthe edges of the obstacles), arrays of x-values and y-values, and the\nnumber of total vertices (including the start and goal vertices, which are\nassumed to be the last two in the array).\n\nThe first test case (commented out) is:\n      *         * G\n    / |\n   /  |    *----*\n  /   |    |   /\n *----*    |  /\n           | /\n * S       *\n\nThe function doesn't correctly handle overlapping objects. The uncommented\ntest case is:\n\n           *        * G\n         / |\n      / *--+-------*\n   /    |  |     /\n *------+--*  /\n        |  /\n * S    *\n\nmore or less, and the output is the same. I think the bug is in the\nintersect function, but I'm not sure. I will try and spend some time in\ngdb...\n\nAnyway, the functions this affects are\n1. the one that reads the files: This needs to fill the obstacles array\nwith adjacency lists representing the obstacle edges, assign a value to\nnum_vertices, and fill the x and y arrays.\n2. Dijkstra's algorithm; Not that there were many ways to do this, anyway.\nIf we search from the goal state, instead of the start, storing in an\nint_list array d both the distance so far (d->v) and the node from which\nthat distance was obtained (d->next), d[START] will be a list of nodes\nforming the shortest path with no additional processing.\n\nJust some ideas, feedback is welcome.\n"),
-//  new RCSNode("M:/robot/2001-11-24 22!02!44 -0500 travis", "1.2", "tag", "", "Here's the simple stop-and-go code. I don't know how much \"tighter\" the\nreal path will be than the one I eyeballed, so we might need to add some\nbuffer space in there. Not sure where that would go. Also want to tweak\nthe velocities a little and see where we can go a little faster.\n"),
-//  new RCSNode("M:/robot/2001-11-25 11!09!11 -0500 travis", "1.3", "tag", "", "Okay, here's a faster one. It's what Russell and I talked about doing. It\nrecalculates the heading and translation at every step and adjusts as\nnecessary. It sets them concurrently, and overshoots corners to leave\nturning room. It's a little tighter than we'd really want, but that\ndepends on how tightly we grow obstacles and can be changed easily...oh, I\nalso bumped up the maximum velocity to the published spec for the Pioneer,\nso even the old one is quite a bit faster.\n"),
-//  new RCSNode("M:/robot/2001-11-25 18!20!07 -0500 travis", "1.4", "tag", "", "Okay, this one has a Dijkstra's algorithm and test code. It takes an array\nof edge lists with distances and the start node, and returns a d array. A\nutility function then takes the d array and the goal node and returns a\nlinked list of vertices.\n")
-); 
+  new RCSNode("L:/server/shares/russ.hn.org/jica", "1.1", "REALLYOLD", "", "citrix java ica client"),
+);
 
-$OUTDIR = "M:/robot/out";
+$OUTDIR = "L:/server/shares/russ.hn.org/out";
 
-function is_binary($name)
+function is_binary($filename)
 {
-  return false;
+  global $is_binary_endings;
+  for($i = -3; $i >= -5; --$i)
+    if (isset($is_binary_endings[substr($filename, $i)])) return false;
+  return strpos($filename,".") !== false && !ends_with($filename,".backup") && !ends_with($filename,".working");
 }
+
+$is_binary_endings = array
+(
+  ".html" => 1, ".php"  => 1, ".inc"  => 1, ".bak" => 1, ".asp" => 1, ".asa" => 1,
+  ".~dfm" => 1, ".~dpr" => 1, ".~pas" => 1, ".cfg" => 1, ".cls" => 1, ".dfm" => 1,
+  ".dof"  => 1, ".hack" => 1, ".eml"  => 1, ".js"  => 1, ".new" => 1, ".old" => 1,
+  ".pas"  => 1, ".prj"  => 1, ".scc"  => 1, ".txt" => 1, ".vbp" => 1, ".vbw" => 1
+);
 
 /*                         END SCRIPT CUSTOMIZATIONS                         */
 ///////////////////////////////////////////////////////////////////////////////
