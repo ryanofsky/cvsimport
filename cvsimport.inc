@@ -261,22 +261,63 @@ class RevisionList
     }
   }
   
-  function checkout($branches = false)
+  function checkout($dir = false, $branches = false)
   {
-    list($p, $module) = PathSplit($this->outFolder);
+    list($cvsroot, $module) = PathSplit($this->outFolder);
+
+    $failed = array();
+    $skipped = array();
+    
     foreach(array_keys($this->revisions) as $i)
     {
       $revision =& $this->revisions[$i];
+      list($p, $folder) = PathSplit($revision->directory);
+
       if (count($revision->tags))
       {
-        list($p, $folder) = PathSplit($revision->directory);
-        $folder = ShellEscape($folder);
-        print("cvs co -r {$revision->tags[0]} -d $folder $module\n");
+        if ($dir) 
+        {
+          $r = cvs_export($cvsroot, $module, $revision->tags[0], 
+            "$dir/$folder", $revision->directory);
+            
+          if ($r) $failed[] = $folder;
+        }
+        else
+        {
+          $d = ShellEscape($folder);
+          print("cvs co -r {$revision->tags[0]} -d $d $module\n");
+        }
       }
-      if ($revision->btag)
+      else
+        $skipped[] = $folder;
+        
+      if ($branches && $revision->btag)
       {
-        print("cvs co -r {$revision->btag} -d {$revision->btag} $module\n");
+        if ($dir)
+          cvs_export($cvsroot, $module, $revision->btag, "$dir/{$revision->btag}");
+        else
+        {
+          print("cvs co -r {$revision->btag} -d {$revision->btag} $module\n\n");  
+        }
       }
+    }
+    
+    if ($dir)
+    {
+      if (count($failed))
+      {
+        print(wordwrap("The import was not successful. The following exported "
+          . "versions differ from the originals: " . implode(", ", $failed)
+          . "." . (count($skipped) ? (" The following revisions were skipped: "
+          . implode(", ", $skipped) . ".") : "") . "\n"));
+      }
+      else
+      {
+        print(wordwrap("No import errors were detected." . (count($skipped)
+         ? (" However, the following untagged versions could not be "
+         . "verified: " . implode(", ", $skipped) . ".") : "") . "\n"));
+      }
+      return (bool)count($failed);
     }
   }
 }
@@ -367,10 +408,10 @@ class File
         $compare = null;
 
       $fileRev =& new FileRevision($this, $revision, $compare, $key);
-      
+
       if (isset($previous))
       {
-        if ($fileRev->changed || !$fileRev->canPrune)
+        if ($fileRev->changed)
         {
           if ($previous->isGhost)
           {
@@ -389,6 +430,9 @@ class File
       }
       else // !isset($previous)
       {
+        if (!$fileRev->changed && $fileRev->canPrune && $fileRev->canPruneBranch)
+          $fileRev->isZero = true;
+       
         if ($fileRev->exists || $fileRev->tagDeletedBranch)
         {
           $p = array();
@@ -396,17 +440,11 @@ class File
           $parent =& $p[0];
           $fileRev->attach($this->revisions, $parent, $previous);
         }
+        // otherwise fileRev becomes a "ghost" revision... 
         
-        // otherwise fileRev becomes a "ghost" revision...        
-        if (!$fileRev->changed)
-        {
-          if ($fileRev->canPrune && $fileRev->canPruneBranch)
-            $fileRev->isZero = true;
-
-          // don't add file that hasn't been created yet
-          if ($fileRev->isGhost && $depth == 2 )
-            unset($fileRev);
-        }
+        // don't add file that hasn't been created yet
+        if ($fileRev->isGhost && $depth == 2)
+          unset($fileRev);        
       }
 
       if (isset($fileRev))
@@ -441,7 +479,7 @@ class File
   // function mysteriously gets transformed from a null value to an
   // empty array, a reference to the real parent is placed at $p[0]
   // so the return value doesn't have to be trusted
-  function & realParent(&$parent, &$history, $depth, &$fileRev, $btag, &$p)
+  function & realParent(&$parent, &$history, $depth, &$fileRev, $btag, &$ret)
   {
     if (!isset($parent) && $depth > 2)
     {
@@ -458,7 +496,7 @@ class File
 
     if ($this->collapseRevisions && $this->collapseBranches)
     {
-      $p[0] =& $parent;
+      $ret[0] =& $parent;
       return $parent;
     }
       
@@ -485,15 +523,16 @@ class File
       else
         assert(!$collapsed);
         
-      $p[0] =& $hval;    
+      $p =& $hval;    
     }
     
-    return $p[0];
+    $ret[0] =& $p;
+    return $p;
   }
 
   function display()
   {
-    print("File = {$this->path}\n");
+    print("\n\n\nFile = {$this->path}\n");
     foreach(array_keys($this->revisions) as $i)
     {
       $nr =& $this->revisions[$i];
@@ -502,9 +541,9 @@ class File
       print("\n");
 
       print("  properties:");
-      if ($nr->exists) print(" exists");
-      if ($nr->changed) print(" changed");
-      if ($nr->isZero) print(" zero");
+      print($nr->exists ? " exists" : " doesn't exist");
+      print($nr->changed ? ", changed" : ", not changed");
+      if ($nr->isZero) print(", zero");
       print("\n");
 
       print ("  tags: " . implode(" ", $nr->tags) . "\n");
@@ -631,20 +670,29 @@ class File
       fwrite($fp, str_replace("@", "@@", $revision->log));
       fwrite($fp, "@\ntext\n@");
 
-      if ($revision->contents !== false)
+      if (isset($revision->diff))
       {
-        if (isset($revision->diff))
-        {
-          if ($revision->diff->contents)
-            $f1 = shellescape($revision->diff->contents);
-          else
-            $f1 = $GLOBALS['BLANKFILE'];
-          $f2 = shellescape($revision->contents);
-          $pp = popen("diff -n -a --binary $f1 $f2", "rb");
-        }
+        if ($revision->diff->contents !== false)
+          $f1 = shellescape($revision->diff->contents);
         else
-          $pp = fopen($revision->contents,"rb");
-
+          $f1 = $GLOBALS['BLANKFILE'];
+          
+        if ($revision->contents !== false)
+          $f2 = shellescape($revision->contents);
+        else
+          $f2 = $GLOBALS['BLANKFILE'];
+          
+        $cmd = "diff -n -a --binary $f1 $f2";
+        $pp = popen($cmd, "rb")
+          or die("Failed to execute '$cmd' at " . __FILE__ . ':' . __LINE__);
+      }
+      else if ($revision->contents !== false)
+        $pp = fopen($revision->contents, "rb");
+      else
+        $pp = false;
+      
+      if ($pp)
+      {
         while(!feof($pp))
         {
           $buffer = fread($pp, 8192);
@@ -1182,6 +1230,168 @@ function array_append(&$a1, $a2)
     array_splice($a1, count($a1), 0, $a2); 
   else
     $a1 = $a2;
+}
+
+function compare_dirs($dir1, $dir2)
+{
+  if (!is_dir($dir1) || !is_dir($dir2)) return true;
+  
+  $d1 = ShellEscape($dir1);
+  $d2 = ShellEscape($dir2);
+  
+  $cmdline = "diff --binary -rq $d1 $d2";
+  return (bool)`$cmdline`;
+}
+
+function del_dir($dir, $recurse = true)
+{
+  $handle = opendir($dir); 
+  if (!$handle)
+    die("failed to open '$dir' at " . __FILE__ . ':' . __LINE__); 
+
+  while($file = readdir($handle))
+  {
+    if ($file == "." || $file == "..") continue;
+    $path = "$dir/$file";
+    if (is_dir($path))
+    {
+      if ($recurse) del_dir($path);
+    }
+    else
+    {
+      if (!unlink($path))
+        die("failed to delete '$path' at " . __FILE__ . ':' . __LINE__);
+    }
+  }
+  closedir($handle);
+  if (!rmdir($dir))
+  {
+    die("failed to delete '$dir' at " . __FILE__ . ':' . __LINE__);
+  }
+}
+
+function del_cvs_dirs($dir)
+{
+  $handle = opendir($dir); 
+  if (!$handle)
+    die("failed to open '$dir' at " . __FILE__ . ':' . __LINE__); 
+
+  while($file = readdir($handle))
+  {
+    if ($file == "." || $file == "..") continue;
+
+    $path = "$dir/$file";
+    if (!is_dir($path)) continue;
+
+    if ($file == "CVS")
+      del_dir($path, false);
+    else
+      del_cvs_dirs($path);
+  }
+  closedir($handle);
+}
+
+function cvs_export($cvsroot, $module, $rev, $codir, $testdir = false)
+{
+  @mkdir("$cvsroot/CVSROOT");
+  
+  $dir = ShellEscape($codir);
+  $d = ShellEscape(":local:$cvsroot");
+  $cmd = "cvs -q -d $d export -r $rev -d $dir $module";
+  print("$cmd\n"); ob_flush();
+  passthru($cmd);
+  del_cvs_dirs($codir);
+  
+  if ($testdir) return compare_dirs($codir, $testdir);
+}
+
+// strip options out of an argument list. unrecognized options
+// are left in place, options specifed more than once assume
+// later values
+//
+// $argv is the argument list, an array of strings
+//
+// $options is an array of arrays describing recognized options.
+//   each option array contains the short name, name, number of
+//   required arguments, default argument value, example:
+//
+//   array
+//   (  array('v', 'verbose', 0, false),
+//      array('f', 'file', 1, false)
+//   )
+//
+// $values is the array where found options are put. it is indexed
+//   by option name. If an option was given with one argument, the
+//   corresponding entry be a string containing the argument. If the
+//   option was given with many arguments, the entry will be an array
+//   of strings. If the option was specified with no arguments, the
+//   entry will be set to the PHP constant, true. And if the option was
+//   not specified, the entry holds the option's default value.
+
+function strip_options($argv, $options, &$values)
+{
+  $short_names = $long_names = array();
+  $values = array();
+  
+  foreach ($options as $key => $opt)
+  {
+    list($name, $abbr, $nargs, $default) = $opt;
+    $values[$name] = $default;
+    
+    assert(!isset($short_names[$abbr]));
+    $short_names[$abbr] =& $options[$key];
+    assert(!isset($long_names[$name]));
+    $long_names[$name] =& $options[$key];
+  }
+  
+  $ret = array();
+  $skip = 0;
+  foreach($argv as $arg)
+  {
+    if ($skip)
+    {
+      --$skip;
+      if (is_array($skip_copy)) $skip_copy[] = $arg; else $skip_copy = $arg;
+      continue;
+    }
+    
+    if ($arg[0] == '-')
+    {
+      if (isset($short_names[$arg[1]]))
+      {
+        $option =& $short_names[$arg[1]];
+        $value = strlen($arg) == 2 ? true : substr($arg, 2);
+      }
+      else if ($arg[1] == '-')
+      {
+        $pos = strrpos($arg, '=');
+        $k = $pos === false ? substr($arg, 2) : substr($arg, 2, $pos - 2);
+        $option =& $long_names[$k];
+        $value = $pos === false ? true : substr($arg, $pos + 1);
+      }
+      
+      if (isset($option))
+      {
+        list($name, $abbr, $nargs, $default) = $option;
+        
+        $skip = $nargs;
+        $skip_copy =& $values[$name];
+
+        if ($nargs > 0 && $value !== true) --$skip;
+        
+        if ($nargs > 1)
+          $values[$name] = $value === true ? array() : array($value);
+        else
+          $values[$name] = $value;
+        
+        continue;
+      }
+    }
+    
+    $ret[] = $arg;
+  }
+  
+  return $ret;
 }
 
 ?>
