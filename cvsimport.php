@@ -31,154 +31,90 @@ define("MODE_SAFETEXT", 2);
 // stores text files in an unknown format.
 define("MODE_NATIVETEXT", 3);
 
+define("MODE_TRANSLATE_MASK", 3);
+
+// this can be ORed with MODE_TEXT, MODE_SAFETEXT, or MODE_NATIVETEXT to enable
+// RCS keyword substitution on the file, by default it will be disabled. If the
+// file is marked as MODE_BINARY, this flag will be ignored.
+define("MODE_SUBSTITUTION", 4);
+
 $mode_abbrevs = array(MODE_BINARY => 'b', MODE_TEXT => 't', MODE_SAFETEXT => 's', MODE_NATIVETEXT => 'v');
 
-function translate_file($filename, $mode, &$temporary)
+class File
 {
-  if ($mode == MODE_BINARY || $mode == MODE_SAFETEXT)
+  var $path;
+  var $mode;
+  var $submode;
+  
+  function File($path)
   {
-    $temporary = false;
-    return $filename;
+    $this->path = $path;
   }
+};
 
-  if ($mode == MODE_TEXT)
+class FileRevision
+{
+  var $exists = false;
+  var $revision = array();
+  var $tag = array();
+  var $btag = '';
+  var $date = 0;
+  var $author = '';
+  var $state = '';
+  var $branches = array();
+  var $placeholder = false;
+  var $next = false;
+  var $diff = false;
+  var $log = '';
+  var $filename;
+  var $temporary = false;
+
+  var $branchno;
+  function FileRevision()
   {
-    $fn = tempnam("","");
-    $temporary = true;
-
-    $fr = fopen($filename, 'rb');
-    $fw = fopen($fn, 'wb');
-
-    $lastCR = false;
-
-    while(!feof($fr))
-    {
-      $str = fread($fr, 8192);
-
-      if ($lastCR && substr($str, 0, 1) == "\r")
-        $str = substr($str, 1);
-
-      $lastCR = substr($str, -1) == "\n";
-
-      $str = str_replace("\r\n", "\n", $str);
-      $str = str_replace("\r", "\n", $str);
-
-      fwrite($fw, $str);
-    }
-
-    fclose($fr);
-    fclose($fw);
-
-    return $fn;
+    global $BLANKFILE;
+    $this->filename = $BLANKFILE;
   }
-  else if ($mode == MODE_NATIVETEXT)
-  {
-    $fn = tempnam("","");
-    $temporary = true;
+};
 
-    $fr = fopen($filename, 'rt');
-    $fw = fopen($fn, 'wb');
 
-    while(!feof($fr))
-    {
-      $str = fread($fr, 8192);
-      fwrite($fw, $str);
-    }
 
-    fclose($fr);
-    fclose($fw);
-
-    return $fn;
-  }
-  else
-    print("Warning: Unknown mode $mode\n");
-}
-
-class RCSNode
+class Revision
 {
   // public variables:
 
   var $directory; // folder containing that srevision
-  var $srevision; // cvs style revision number in string form
   var $tag; // tag name to use for this revision
   var $btag; // branch tag name to use if this is the first node in a new branch
-  var $log; // log entry to use for changes made in this revision
-  var $date; // date to use for deletions in this srevision, false to use the date of the newest file
-  var $author; // author string, false to use the default author
-
+  var $log;
+  var $author;
+  
   // internal variables:
 
-  var $state;
-  var $branches;
-  var $next;
-  var $diff;
-  var $posterior;
-  var $ulterior;
+  var $srevision; // stringified revision number
   var $revision; // cvs revision as an array of integers
-  var $diff;
-  var $placeholder;
-  var $temporary = false;
+  var $date = false; // date of the newest file
+  var $branches = array();
+  var $next = false;
+  var $diff = false;
+  var $posterior = false;
+  var $anterior = false;
 
-  function RCSNode($directory, $srevision, $tag, $btag, $log, $author = false)
+  function Revision($directory, $tag, $btag, $log = '', $author = '')
   {
     GLOBAL $DEFAULT_AUTHOR, $BLANKFILE;
 
     $this->directory = $directory;
-    $this->srevision = $srevision;
-    $this->tag = $tag ? (is_array($tag) ? $tag : array($tag)) : array();
+    $this->tag = $tag ? as_array($tag) : array();
     $this->btag = $btag;
     $this->log = $log;
-    $this->date = false;
-    $this->author = $author === false ? $DEFAULT_AUTHOR : $author;
-    $this->state = "";
-    $this->branches = array();
-    $this->next = false;
-    $this->diff = false;
-
-    $this->posterior = false;
-    $this->ulterior = false;
-
-    $this->revision = array_map("make_integer",explode(".", $srevision));
-
-    $this->branchno = 0;
-    $this->filename = $BLANKFILE;
-    $this->placeholder = false;
-
-    $depth = count($this->revision);
-    if ($depth < 2)
-      warning("\"$srevision\" is not a valid revision number. Revision numbers be series of digits separated by dots like 1.2, 1.31, 1.33.5.73, or 44.56 . A revision number has to have at least one dot.");
-    else if ($depth % 2 != 0)
-      warning("\"$srevision\" is not a valid revision number. (Revision numbers must have an even number of segments like 1.2 or 1.2.2.3 and NOT like 1.2.3)");
-    else if (in_array(0,$this->revision,true))
-      warning("\"$srevision\" is not a valid revision number. None of the numbers in a revision numbers can be zeros.");
-
-    foreach($this->tag as $tag)
-    if (strlen($tag) > 0 && !valid_tag($tag))
-      warning("Revision \"$srevision\" has an invalid tag. A tag must begin with a letter and can be followed by letters, numbers, hypens, and underscores. Two reserved words \"BASE\" and \"HEAD\" cannot be used as tag names.");
-
-    if (strlen($btag) > 0 && !valid_tag($btag))
-      warning("Revision \"$srevision\" has an invalid branch tag. A tag must begin with a letter and can be followed by letters, numbers, hypens, and underscores. Two reserved words \"BASE\" and \"HEAD\" cannot be used as tag names.");
-  }
-}
-
-class DummyNode // used as a placeholder in NodeList::PrepareNodes
-{
-  var $exists;
-  var $filename;
-  var $date;
-
-  function DummyNode()
-  {
-    global $BLANKFILE;
-    $this->exists = false;
-    $this->filename = $BLANKFILE;
-    $this->date = 0;
+    $this->author = $author;
   }
 }
 
 class NodeList
 {
-  var $nodes;   // array of nodes
+  var $nodes;   // associative array of nodes
   var $files;   // associative array of all files that ever existed in the project. file paths are indices
   var $folders; // associative array of all folders that ever existed in the project. folder paths are indices
 
@@ -191,17 +127,31 @@ class NodeList
   function NodeList($nodes)
   {
     $this->prune = true;
-
-    usort($nodes, "node_compare");
-
-    $history = array();
     $this->defaultbranch = false;
 
-    for($i = 0; $i < count($nodes); ++$i) // traverse the sorted list and fill in the next, diff, and branches members
+    uasort($nodes, "node_compare");
+    $history = array();
+
+    foreach(array_keys($nodes) as $i) // traverse the sorted list and fill in the next, diff, and branches members
     {
-      $srevision = $nodes[$i]->srevision;
-      $revision = $nodes[$i]->revision;
-      $depth = count($revision);
+      $node =& $nodes[$i];
+   
+      $revision = $node->revision = array_map("make_integer",explode(".", $i));
+      $srevision = $node->srevision = implode('.', $revision);
+      $depth = count($node->revision);
+      if ($depth < 2)
+        warning("\"$i\" is not a valid revision number. Revision numbers be series of digits separated by dots like 1.2, 1.31, 1.33.5.73, or 44.56 . A revision number has to have at least one dot.");
+      else if ($depth % 2 != 0)
+        warning("\"$i\" is not a valid revision number. (Revision numbers must have an even number of segments like 1.2 or 1.2.2.3 and NOT like 1.2.3)");
+      else if (in_array(0,$node->revision,true))
+        warning("\"$i\" is not a valid revision number. None of the numbers in a revision numbers can be zeros.");
+  
+      foreach($node->tag as $tag)
+      if (strlen($tag) > 0 && !valid_tag($tag))
+        warning("Revision \"$srevision\" has an invalid tag. A tag must begin with a letter and can be followed by letters, numbers, hypens, and underscores. Two reserved words \"BASE\" and \"HEAD\" cannot be used as tag names.");
+  
+      if (strlen($btag) > 0 && !valid_tag($btag))
+        warning("Revision \"$srevision\" has an invalid branch tag. A tag must begin with a letter and can be followed by letters, numbers, hypens, and underscores. Two reserved words \"BASE\" and \"HEAD\" cannot be used as tag names.");
 
       if ($revision == array(1,1,1,1)) $this->defaultbranch = $i;
 
@@ -217,31 +167,31 @@ class NodeList
         if ($pr !== false) // not the very first revision
         {
           $nodes[$pr]->diff = $i;   // use a reverse diff because this is the main trunk
-          $nodes[$i]->next = $pr;       // point backwards to the previous revision
-          $nodes[$i]->posterior = $pr;
-          $nodes[$pr]->ulterior = $i;
+          $node->next = $pr;       // point backwards to the previous revision
+          $node->posterior = $pr;
+          $nodes[$pr]->anterior = $i;
         }
       }
       else if($pr !== false && array_eq($revision,$nodes[$pr]->revision,$depth-1))
       {
-        $nodes[$i]->diff = $pr;    // use a forward diff on a branch
+        $node->diff = $pr;    // use a forward diff on a branch
         $nodes[$pr]->next = $i;        // previous node points to this one
-        $nodes[$i]->posterior = $pr;
-        $nodes[$pr]->ulterior = $i;
+        $node->posterior = $pr;
+        $nodes[$pr]->anterior = $i;
       }
       else if($pa === false) // problemo
         warning("\"$srevision\" needs a parent node to branch off of. Either change its revision number or add in a new node (even an empty one will do) like a \"" . implode(".",array_slice($revision,0,$depth-2)) . "\"" . ( $revision[$depth-3] != 1 ? " or a \"" . implode(".",array_slice($revision,0,$depth-3)) . ".1\"": "") . ".");
       else // this is a new branch
       {
-        $nodes[$i]->diff = $pa;
+        $node->diff = $pa;
         $nodes[$pa]->branches[] = $i;
         $needs_branch_tag = true;
-        $nodes[$i]->posterior = $pa;
+        $node->posterior = $pa;
       }
 
-      if (!$needs_branch_tag && strlen($nodes[$i]->btag) > 0)
+      if (!$needs_branch_tag && strlen($node->btag) > 0)
         warning("You supplied a branch tag for revision \"$srevision\" that cannot be used because this revision is not at the head of a new branch. You need to set it to the empty string (\"\") or false.");
-      else if ($needs_branch_tag && strlen($nodes[$i]->btag) == 0)
+      else if ($needs_branch_tag && strlen($node->btag) == 0)
         warning("Because revision \"$srevision\" is at the head of a new branch, you must to give it a branch tag");
 
       $history[$depth] = $i;
@@ -272,7 +222,7 @@ class NodeList
       }
       if ($v->btag) print("  Branch Tag: " . $v->btag . "\n");
       print("  Posterior:  " . ($v->posterior!== false ? $this->nodes[$v->posterior]->srevision : "---" ) . "\n");
-      print("  Ulterior:   " . ($v->ulterior !== false ? $this->nodes[$v->ulterior ]->srevision : "---" ) . "\n");
+      print("  Anterior:   " . ($v->anterior !== false ? $this->nodes[$v->anterior ]->srevision : "---" ) . "\n");
       print("\n");
     }
   }
@@ -282,10 +232,9 @@ class NodeList
     global $OUTDIR;
     if ($node === false)
     {
-      for($i=0; $i < count($this->nodes); ++$i)
+      foreach(array_keys($this->nodes) as $i)
       {
-        $date = $this->ScanFolders($i);
-        if ($this->nodes[$i]->date === false) $this->nodes[$i]->date = $date;
+        $this->nodes[$i]->lastDate = $this->ScanFolders($i);
       }
     }
     else
@@ -326,58 +275,66 @@ class NodeList
   {
     global $mode_abbrevs;
     reset ($this->files);
-    while (list($filename) = each($this->files))
+    while (list($path) = each($this->files))
     {
-      $fnodes = $this->nodes;
       $mode = get_mode(substr($filename,1));
-      print($mode_abbrevs[$mode] .  " $filename ... ");
-      $this->preparenodes($filename, $mode, $fnodes, $head);
-      $this->writeRCS($filename, $mode, $fnodes, $head);
-      print("Done.\n");
+      print(($mode_abbrevs[$mode] & MODE_TRANSLATE_MASK) .  " $filename ... "); ob_flush(); flush();
+      $file =& new File($path);
+      $this->preparenodes($file);
+      HookInitFile($file, $this->nodes);
+      $this->writeRCS($file);
+      print("Done.\n"); ob_flush(); flush();      
     }
   }
 
   // PRIVATE HELPER FUNCTIONS
 
-  function preparenodes($filename, $mode, &$fnodes, &$head) // set up nodes for a particular file
+  function preparenodes($file) // set up nodes for a particular file
   {
-    $keys = array_keys($fnodes);
-    foreach($keys as $i)
-    {
-      $node = &$fnodes[$i];
-      $depth = count($node->revision);
+    $file->revisions = array();
 
-      // establish $pnode (reference to posterior node) and $node->nrevision (new revision number)
-      if($node->posterior === false)
+    foreach(array_keys($this->nodes) as $i)
+    {
+      $node = &$this->nodes[$i];
+      $depth = count($node->revision);
+      
+      $fnode = new FileRevision();
+      
+      // establish $pfnode (reference to posterior node) and $node->nrevision (new revision number)
+      if($fnode->posterior === false)
       {
-        $pnode = new DummyNode();
-        $node->nrevision = array($node->revision[0],1);
+        $pfnode =& new FileRevision();
+        $fnode->revision = array($node->revision[0],1);
       }
       else
       {
-        $pnode = &$fnodes[$node->posterior];
-        $node->nrevision = $pnode->nrevision;
-        if($node->btag)
+        $pfnode =& $file->revisions[$node->posterior];
+        $fnode->revision = $pfnode->revision;
+        if ($node->btag)
         {
-          $node->nrevision[] = $pnode->branchno + ((($pnode->branchno % 2 == 0) xor ($node->revision[$depth-2] % 2 == 0)) ? 1 : 2);
-          $node->nrevision[] = 1;
+          // new number should be even or odd just like old number
+          $pfnode->branchno += ((($pnode->branchno % 2 == 0)
+            xor ($node->revision[$depth-2] % 2 == 0)) ? 1 : 2);
+          $fnode->revision[] = $pfnode->branchno;
+          $fnode->revision[] = 1;
         }
         else
-          ++$node->nrevision[count($node->nrevision)-1];
+          ++$fnode->revision[count($node->nrevision)-1];
       }
 
-      // can this node be eliminated? is it redundant?
+      // find out if this node can be eliminated because it is redundant
+      // set exists, filename, date, exists, state, placeholder fields
       $keep = false;
-      $node->realname = $node->directory . $filename;
-      if (file_exists($node->realname))
+      $fnode->filename = $node->directory . $file->path;
+      if (file_exists($fnode->filename))
       {
-        $node->exists = true;
-        $node->filename = translate_file($node->realname, $mode, $node->temporary);
-        $node->date = filemtime($node->filename);
-        if ($pnode->exists)
+        $fnode->exists = true;
+        $fnode->filename = translate_file($fnode->filename, $mode, $fnode->temporary);
+        $fnode->date = filemtime($node->filename);
+        if ($pfnode->exists)
         {
-          $f1 = $pnode->filename;
-          $f2 = $node->filename;
+          $f1 = $pfnode->filename;
+          $f2 = $fnode->filename;
           if (`diff -q --binary "$f1" "$f2"`) $keep = true;
         }
         else
@@ -385,15 +342,18 @@ class NodeList
       }
       else // file_not_exists
       {
-        $node->exists = false;
-        $node->filename = $pnode->filename; // the diff for a deleted file tells what the file looked like before it was deleted
-        if ($pnode->exists) $keep = true;
+        $fnode->exists = false;
+        // the diff for a deleted file tells what the file looked like before it was deleted
+        $fnode->filename = $pfnode->filename;
+        $fnode->date = $node->lastDate;
+        if ($pfnode->exists) $keep = true;
       }
 
-      if ($node->posterior === false && !$keep && count($node->branches) > 0)
+      if ($node->posterior === false && !$keep && count($fnode->branches) > 0)
       {
         $keep = true;
-        $node->placeholder = true; // can't delete this node unless all branch nodes are deleted
+        // can't delete this node unless all branch nodes are deleted
+        $fnode->placeholder = true;
       }
 
       if ($node->btag && $node->exists)
@@ -403,15 +363,16 @@ class NodeList
 
       if($keep)
       {
-        $node->state = $node->exists ? "Exp" : "dead";
+        $fnode->state = $fnode->exists ? "Exp" : "dead";
         if ($node->posterior === $node->next) // cheesy way to see if the node is on the main thrunk
           $head = $i;
+        $file->node[$i] =& $fnode;
       }
       else // this is a redundant node that will be deleted
       {
         if($node->btag)
         {
-          if ($node->ulterior === false && $pnode->placeholder && count($pnode->branches) == 1)
+          if ($node->anterior === false && $pfnode->placeholder && count($pfnode->branches) == 1)
           {
             $this->deletenode($fnodes,$node->posterior);
             $node->posterior = false;
@@ -420,10 +381,10 @@ class NodeList
           else
           {
             $f = array_search($i,$pnode->branches);
-            if ($node->ulterior !== false)
+            if ($node->anterior !== false)
             {
-              $pnode->branches[$f] = $node->ulterior;
-              $fnodes[$node->ulterior]->btag = $node->btag;
+              $pnode->branches[$f] = $node->anterior;
+              $fnodes[$node->anterior]->btag = $node->btag;
             }
             else
               unset($pnode->branches[$f]);
@@ -443,7 +404,7 @@ class NodeList
     }
   }
 
-  function deletenode(&$fnodes, $i)
+  function DeleteNode(&$fnodes, $i)
   {
     $node = &$fnodes[$i];
 
@@ -455,11 +416,11 @@ class NodeList
     if (!$node->btag && $node->diff !== false)
       $fnodes[$node->diff]->next = $node->next;
 
-    if ($node->ulterior !== false)
-      $fnodes[$node->ulterior]->posterior = $node->posterior;
+    if ($node->anterior !== false)
+      $fnodes[$node->anterior]->posterior = $node->posterior;
 
     if (!$node->btag && $node->posterior !== false)
-      $nodes[$node->posterior]->ulterior = $node->ulterior;
+      $nodes[$node->posterior]->anterior = $node->anterior;
 
     if ($node->posterior !== false)
     {
@@ -484,7 +445,7 @@ class NodeList
     {
       $p = strrpos($filename,"/");
       $folder = substr($filename,0,$p) . "/Attic";
-      @mkdir("$OUTDIR$folder",0777);
+      @mkdir("$OUTDIR$folder");
       $filename = "$folder/" . substr($filename,$p+1);
     }
 
@@ -674,80 +635,95 @@ function node_body_compare($a,$b)
   }
 }
 
+function as_array($v)
+{
+  return is_array($tag) ? $tag : array($tag);
+};
+
 function array_eq($a, $b, $depth)
 {
-  return array_slice($a,0,$depth) == array_splice($b,0,$depth);
+  return array_slice($a,0,$depth) == array_slice($b,0,$depth);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-/*                        BEGIN SCRIPT CUSTOMIZATIONS                        */
-
-function get_mode($filename)
+function translate_file($filename, $mode, &$temporary)
 {
-  global $is_binary_endings;
-  for($i = -4; $i >= -4; --$i)
-    if (isset($is_binary_endings[substr($filename, $i)])) return MODE_BINARY;
-  return MODE_SAFETEXT;
+  if ($mode == MODE_BINARY || $mode == MODE_SAFETEXT)
+  {
+    $temporary = false;
+    return $filename;
+  }
+
+  if ($mode == MODE_TEXT)
+  {
+    $fn = tempnam("","");
+    $temporary = true;
+
+    $fr = fopen($filename, 'rb');
+    $fw = fopen($fn, 'wb');
+
+    $lastCR = false;
+
+    while(!feof($fr))
+    {
+      $str = fread($fr, 8192);
+
+      if ($lastCR && substr($str, 0, 1) == "\r")
+        $str = substr($str, 1);
+
+      $lastCR = substr($str, -1) == "\n";
+
+      $str = str_replace("\r\n", "\n", $str);
+      $str = str_replace("\r", "\n", $str);
+
+      fwrite($fw, $str);
+    }
+
+    fclose($fr);
+    fclose($fw);
+
+    return $fn;
+  }
+  else if ($mode == MODE_NATIVETEXT)
+  {
+    $fn = tempnam("","");
+    $temporary = true;
+
+    $fr = fopen($filename, 'rt');
+    $fw = fopen($fn, 'wb');
+
+    while(!feof($fr))
+    {
+      $str = fread($fr, 8192);
+      fwrite($fw, $str);
+    }
+
+    fclose($fr);
+    fclose($fw);
+
+    return $fn;
+  }
+  else
+    print("Warning: Unknown mode $mode\n");
 }
-
-$is_binary_endings = array
-(
-  ".gif" => 1, ".jpg"  => 1
-);
-
-$DEFAULT_AUTHOR = "algore";
-
-$VERSIONS = array
-(
-  new RCSNode("M:/temp/homeworks/os/1" , "1.1"    , "hw1-1",        "", "original shell.", "russ" ),
-  new RCSNode("M:/temp/homeworks/os/2" , "1.2"    , "hw1-2",        "", "added pinfo", "osteam" ),
-  new RCSNode("M:/temp/homeworks/os/3" , "1.3"    , "hw1-submit1",  "", "added readme's and patch", "osteam" ),
-  new RCSNode("M:/temp/homeworks/os/4" , "1.4"    , "hw1-submit2",  "", "fixed readme", "osteam" ),
-  new RCSNode("M:/temp/homeworks/os/5" , "1.5"    , "hw2-1",        "", "Imported nieh's user threading code", "nieh" ),
-  new RCSNode("M:/temp/homeworks/os/6" , "1.6"    , "hw2-2",        "", "friday, oct 18", "osteam" )
-);
-
-$OUTDIR = "L:/server/shares/cvsroot/os";
-
-
-
-/*                         END SCRIPT CUSTOMIZATIONS                         */
-///////////////////////////////////////////////////////////////////////////////
-
-
-// function abc($ra,$rb)
-// {
-//   for($i=0;;++$i)
-//   {
-//     if ($i > 1) $m = 1;
-//     if(isset($ra[$i]))
-//     {
-//       if (isset($rb[$i]))
-//       {
-//         if ($ra[$i] == $rb[$i]) continue;
-//         return $ra[$i] < $rb[$i] ? -$m : $m;
-//       }
-//       else
-//         return $m;
-//     }
-//     else if (isset($rb[$i]))
-//       return -$m;
-//     else
-//       return 0;
-//   }
-// }
-//
-// function abcd($a)
-// {
-//   print( $a . "\n");
-// }
-//
-// abcd(abc(  array(1,4)      ,  array(1,4,2,1)   ));
-// abcd(abc(  array(1,4,2,1)  ,  array(1,4    )   ));
-// abcd(abc(  array(1,6)      ,  array(1,6,2,1)   ));
-// abcd(abc(  array(1,6,2,1)  ,  array(1,6    )   ));
 
 $BLANKFILE = tempnam("","");
+
+if ($_SERVER['argc'] != 1)
+{
+  print("Usage: php cvsimport.php hooks.inc\n");
+  exit();
+}
+
+$file = $_SERVER['argv'][1];
+
+if (!file_exists($file))
+{
+  die("File '$file' does not exist");
+}
+else
+{
+  include $file;
+}
 
 $nl = new NodeList($VERSIONS);
 //$nl->display();
@@ -759,17 +735,8 @@ else
   $nl->save();
 }
 
-//
-//$filename = "/include/VHGraph1_0/class.graph1";
-//$fnodes = $nl->nodes;
-//$isbinary = false;
-//print(($isbinary ? "B" : "A") .  " $filename ... \n");
-//$nl->preparenodes($filename, $isbinary, $fnodes, $head);
-//$nl->writeRCS($filename, $isbinary, $fnodes, $head);
-//
-//print("\nDone.\n");
-//
-
 unlink($BLANKFILE);
+
+print("\nDone.\n");
 
 ?>
